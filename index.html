@@ -5,16 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hero 3D Conexiones Reactivas Automáticas</title>
   <style>
-    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background-color:#196984; display:flex; }
+    html, body, .text-pane, .canvas-pane, canvas {
+      margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+      background-color:#2488AA; display:flex;
+      /* Cursor personalizado en todo el hero */
+      cursor: url('https://static.wixstatic.com/media/709bfd_761fa7417772464d9ac043e332f2aabe~mv2.png') 16 16, auto !important;
+    }
     .text-pane { flex:0.45; }
     .canvas-pane { flex:0.55; position:relative; }
     canvas { position:absolute; top:0; left:0; width:100%; height:100%; display:block; }
+    /* Overlay transparente opcional para asegurar cursor en canvas */
+    #cursorOverlay {
+      position:absolute; top:0; left:0; width:100%; height:100%;
+      pointer-events:none; z-index:10;
+      cursor: inherit;
+    }
   </style>
 </head>
 <body>
   <div class="text-pane"></div>
   <div class="canvas-pane">
     <canvas id="heroCanvas"></canvas>
+    <div id="cursorOverlay"></div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script>
@@ -25,7 +37,6 @@
     const influence = [];
     const ray = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-
     const pullR = 0.25, pullT = 3000, pullS = 2.5;
 
     init(); animate();
@@ -36,33 +47,33 @@
       const h = window.innerHeight;
       camera = new THREE.PerspectiveCamera(60, w/h, 0.1, 100);
       camera.position.set(0,0,2.5);
-      renderer = new THREE.WebGLRenderer({canvas:document.getElementById('heroCanvas'), antialias:true});
-      renderer.setSize(w,h);
+      renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('heroCanvas'), antialias: true });
+      renderer.setSize(w, h);
       renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setClearColor(0x196984);
+      renderer.setClearColor(0x2488AA);
 
-      buildNetwork(300,3);
+      buildNetwork(300, 3);
 
-      const sphereGeo = new THREE.SphereGeometry(1,64,64);
+      const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
       new THREE.TextureLoader().load(
         'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png',
-        tex=>{
+        tex => {
           earth = new THREE.Mesh(
             sphereGeo,
-            new THREE.MeshBasicMaterial({map:tex, transparent:true})
+            new THREE.MeshBasicMaterial({ map: tex, transparent: true })
           );
           scene.add(earth);
-        },null,
-        ()=>{
+        }, null,
+        () => {
           earth = new THREE.Mesh(
             sphereGeo,
-            new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true})
+            new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
           );
           scene.add(earth);
         }
       );
 
-      window.addEventListener('resize',()=>{
+      window.addEventListener('resize', () => {
         const ww = window.innerWidth * 0.55;
         const hh = window.innerHeight;
         camera.aspect = ww/hh;
@@ -72,94 +83,95 @@
       window.addEventListener('pointermove', onMove);
     }
 
-    function buildNetwork(n,k) {
-      for(let i=0;i<n;i++){
-        const u = Math.random()*2-1;
+    function buildNetwork(n, k) {
+      for (let i = 0; i < n; i++) {
+        const u = Math.random() * 2 - 1;
         const th = Math.acos(u);
-        const ph = Math.random()*Math.PI*2;
+        const ph = Math.random() * Math.PI * 2;
         const v = new THREE.Vector3(
-          Math.sin(th)*Math.cos(ph),
+          Math.sin(th) * Math.cos(ph),
           Math.cos(th),
-          Math.sin(th)*Math.sin(ph)
+          Math.sin(th) * Math.sin(ph)
         );
         points.push(v.clone()); original.push(v.clone());
       }
-      const addR=(c,lat1,lat2,lon1,lon2)=>{
-        for(let i=0;i<c;i++){
-          const lat = (Math.random()*(lat2-lat1)+lat1)*Math.PI/180;
-          const lon = (Math.random()*(lon2-lon1)+lon1)*Math.PI/180;
-          const v=new THREE.Vector3(
-            Math.cos(lat)*Math.cos(lon),
+      const addRegion = (c, lat1, lat2, lon1, lon2) => {
+        for (let i = 0; i < c; i++) {
+          const lat = (Math.random() * (lat2 - lat1) + lat1) * Math.PI/180;
+          const lon = (Math.random() * (lon2 - lon1) + lon1) * Math.PI/180;
+          const v = new THREE.Vector3(
+            Math.cos(lat) * Math.cos(lon),
             Math.sin(lat),
-            Math.cos(lat)*Math.sin(lon)
-          ); points.push(v.clone()); original.push(v.clone());
+            Math.cos(lat) * Math.sin(lon)
+          );
+          points.push(v.clone()); original.push(v.clone());
         }
       };
-      addR(20,24,49,-125,-94);
-      addR(10,45,60,-140,-60);
-      addR(10,15,30,-117,-86);
+      addRegion(20, 24, 49, -125, -94);
+      addRegion(10, 45, 60, -140, -60);
+      addRegion(10, 15, 30, -117, -86);
 
-      points.forEach((v,i)=>{
-        const arr = points.map((w,j)=>({j,d:v.distanceTo(w)}))
-          .filter(o=>o.j!==i).sort((a,b)=>a.d-b.d);
-        neighbors[i]=arr.slice(0,k).map(o=>o.j);
+      points.forEach((v, i) => {
+        const arr = points.map((w, j) => ({ j, d: v.distanceTo(w) }))
+          .filter(o => o.j !== i).sort((a,b) => a.d - b.d);
+        neighbors[i] = arr.slice(0, k).map(o => o.j);
       });
 
-      const edges=[];
-      points.forEach((v,i)=>{
-        neighbors[i].forEach(j=>{
-          if(j>i){ const w=points[j]; edges.push(v.x,v.y,v.z,w.x,w.y,w.z); }
-        });
+      const edges = [];
+      points.forEach((v, i) => {
+        neighbors[i].forEach(j => { if (j > i) {
+          const w = points[j];
+          edges.push(v.x, v.y, v.z, w.x, w.y, w.z);
+        }});
       });
-      netGeo=new THREE.BufferGeometry();
-      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges,3));
-      // Opacidad permanente al 60%
+      netGeo = new THREE.BufferGeometry();
+      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges, 3));
       const netMat = new THREE.LineBasicMaterial({
-        color: 0xffffff,
-        opacity: 0.3,
-        transparent: true,
-        depthTest: false  // aseguramos que las líneas se dibujen por encima de la esfera
+        color: 0xffffff, opacity: 0.5, transparent: true, depthTest: false
       });
-      scene.add(new THREE.LineSegments(netGeo,netMat));
+      scene.add(new THREE.LineSegments(netGeo, netMat));
 
-      const pa=new Float32Array(points.length*3);
-      points.forEach((v,i)=>{ pa[3*i]=v.x; pa[3*i+1]=v.y; pa[3*i+2]=v.z; });
-      ptsGeo=new THREE.BufferGeometry();
-      ptsGeo.setAttribute('position',new THREE.BufferAttribute(pa,3));
-      const pm=new THREE.PointsMaterial({color:0xffffff,size:0.013});
-      scene.add(new THREE.Points(ptsGeo,pm));
+      const pa = new Float32Array(points.length * 3);
+      points.forEach((v, i) => {
+        pa[3*i] = v.x; pa[3*i+1] = v.y; pa[3*i+2] = v.z;
+      });
+      ptsGeo = new THREE.BufferGeometry();
+      ptsGeo.setAttribute('position', new THREE.BufferAttribute(pa, 3));
+      const pm = new THREE.PointsMaterial({ color: 0xffffff, size: 0.013 });
+      scene.add(new THREE.Points(ptsGeo, pm));
     }
 
-    function onMove(e){
-      if(!earth) return;
-      const r=renderer.domElement.getBoundingClientRect();
-      mouse.x=((e.clientX-r.left)/r.width)*2-1;
-      mouse.y=-((e.clientY-r.top)/r.height)*2+1;
-      ray.setFromCamera(mouse,camera);
-      const h=ray.intersectObject(earth)[0];
-      if(!h) return;
-      const p=h.point.clone().normalize();
-      const now=performance.now();
-      points.forEach((v,i)=>{ if(v.distanceTo(p)<pullR) influence.push({i,target:p.clone(),t:now}); });
+    function onMove(e) {
+      if (!earth) return;
+      const r = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+      mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+      ray.setFromCamera(mouse, camera);
+      const h = ray.intersectObject(earth)[0]; if (!h) return;
+      const p = h.point.clone().normalize(); const now = performance.now();
+      points.forEach((v, i) => { if (v.distanceTo(p) < pullR) influence.push({ i, target: p.clone(), t: now }); });
     }
 
-    function animate(){
+    function animate() {
       requestAnimationFrame(animate);
-      scene.children.forEach(o=>{ if(o.geometry) o.rotation.y+=0.0005; });
-      const now=performance.now();
-      for(let i=influence.length-1;i>=0;i--){
-        const inf=influence[i]; const t=(now-inf.t)/pullT;
-        if(t>=1){ points[inf.i].copy(original[inf.i]); influence.splice(i,1); }
-        else { const s=Math.sin(t*Math.PI)*pullS; points[inf.i].lerpVectors(original[inf.i], inf.target, s); }
+      scene.children.forEach(o => { if (o.geometry) o.rotation.y += 0.0005; });
+      const now = performance.now();
+      for (let i = influence.length - 1; i >= 0; i--) {
+        const inf = influence[i]; const t = (now - inf.t) / pullT;
+        if (t >= 1) { points[inf.i].copy(original[inf.i]); influence.splice(i, 1); }
+        else { const s = Math.sin(t * Math.PI) * pullS; points[inf.i].lerpVectors(original[inf.i], inf.target, s); }
       }
-      const pArr=ptsGeo.attributes.position.array;
-      points.forEach((v,i)=>{ pArr[3*i]=v.x; pArr[3*i+1]=v.y; pArr[3*i+2]=v.z; });
-      ptsGeo.attributes.position.needsUpdate=true;
-      const nArr=netGeo.attributes.position.array;
-      let ptr=0;
-      points.forEach((v,i)=>{ neighbors[i].forEach(j=>{ if(j>i){ const w=points[j]; nArr[ptr++]=v.x; nArr[ptr++]=v.y; nArr[ptr++]=v.z; nArr[ptr++]=w.x; nArr[ptr++]=w.y; nArr[ptr++]=w.z; } }); });
-      netGeo.attributes.position.needsUpdate=true;
-      renderer.render(scene,camera);
+      const pArr = ptsGeo.attributes.position.array;
+      points.forEach((v, i) => { pArr[3*i] = v.x; pArr[3*i+1] = v.y; pArr[3*i+2] = v.z; });
+      ptsGeo.attributes.position.needsUpdate = true;
+      const nArr = netGeo.attributes.position.array; let ptr = 0;
+      points.forEach((v, i) => { neighbors[i].forEach(j => { if (j > i) {
+        const w = points[j];
+        nArr[ptr++] = v.x; nArr[ptr++] = v.y; nArr[ptr++] = v.z;
+        nArr[ptr++] = w.x; nArr[ptr++] = w.y; nArr[ptr++] = w.z;
+      }}); });
+      netGeo.attributes.position.needsUpdate = true;
+      renderer.render(scene, camera);
     }
   </script>
 </body>
