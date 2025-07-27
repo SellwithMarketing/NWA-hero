@@ -9,7 +9,7 @@
       margin: 0; padding: 0;
       width:100%; height:100%;
       overflow:hidden;
-      background-color: #196984;
+      background-color: #196984; /* Fondo corporativo */
     }
     canvas { display: block; }
   </style>
@@ -41,15 +41,17 @@
       });
       renderer.setPixelRatio(devicePixelRatio);
       renderer.setSize(innerWidth, innerHeight);
-      renderer.setClearColor(0x196984);  // fondo corporativo
+      renderer.setClearColor(0x196984);  // fondo #196984
 
-      // Geometría base
+      // Geometría base de la Tierra
       const geom = new THREE.SphereGeometry(1, 64, 64);
 
-      // Cargo la textura desde ruta relativa (continents.png en el mismo folder)
-      const textureURL = './continents.png';
+      // Ruta al PNG con espacios, codificada
+      const pngName = encodeURI('Tierra transparenteRecurso 1.png');
+
+      // Carga de la textura desde archivo local en el mismo directorio
       new THREE.TextureLoader().load(
-        textureURL,
+        pngName,
         (tex) => {
           const mat = new THREE.MeshBasicMaterial({
             map: tex,
@@ -60,15 +62,15 @@
         },
         undefined,
         (err) => {
-          console.error('Error cargando continents.png:', err);
-          // Fallback: muestro la esfera en wireframe si falla la textura
-          const wire = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
-          earthMesh = new THREE.Mesh(geom, wire);
+          console.error('Error cargando', pngName, err);
+          // Fallback a wireframe si falla
+          const wireMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+          earthMesh = new THREE.Mesh(geom, wireMat);
           scene.add(earthMesh);
         }
       );
 
-      // Eventos
+      // Eventos de interacción y resize
       window.addEventListener('resize', onResize);
       window.addEventListener('pointermove', onPointerMove);
     }
@@ -80,9 +82,9 @@
     }
 
     function onPointerMove(e) {
-      if (!earthMesh) return; // espera a que cargue
+      if (!earthMesh) return; // espera a la textura
 
-      // Normaliza de [0,1] → [-1,+1]
+      // Coordenadas normalizadas [-1,1]
       mouse.x = (e.clientX/innerWidth)*2 - 1;
       mouse.y = -(e.clientY/innerHeight)*2 + 1;
 
@@ -90,16 +92,15 @@
       const hit = raycaster.intersectObject(earthMesh)[0];
       if (hit) {
         const pt = hit.point.clone();
-        const geo = new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(0,0,0),
-          pt
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, 0, 0), pt
         ]);
-        const mat = new THREE.LineBasicMaterial({
+        const lineMat = new THREE.LineBasicMaterial({
           color: 0xffffff,
           transparent: true,
           opacity: 0.15
         });
-        const ln = new THREE.Line(geo, mat);
+        const ln = new THREE.Line(lineGeo, lineMat);
         scene.add(ln);
         lines.push(ln);
       }
@@ -107,11 +108,10 @@
 
     function animate() {
       requestAnimationFrame(animate);
-
-      // Gira la Tierra
+      // Rotación suave
       if (earthMesh) earthMesh.rotation.y += 0.0007;
 
-      // Desvanece y elimina líneas viejas
+      // Desvanecer y remover líneas
       for (let i = lines.length - 1; i >= 0; i--) {
         const ln = lines[i];
         ln.material.opacity -= 0.005;
@@ -120,7 +120,6 @@
           lines.splice(i, 1);
         }
       }
-
       renderer.render(scene, camera);
     }
   </script>
