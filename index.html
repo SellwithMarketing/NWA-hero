@@ -3,16 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hero 3D Dinámico</title>
+  <title>Hero 3D Conexiones Dinámicas</title>
   <style>
     html, body {
       margin: 0; padding: 0;
       width: 100%; height: 100%; overflow: hidden;
-      background-color: #196984; /* Fondo corporativo */
+      background-color: #196984;
     }
-    canvas {
-      display: block;
-    }
+    canvas { display: block; }
   </style>
 </head>
 <body>
@@ -22,6 +20,8 @@
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js';
 
     let scene, camera, renderer, earthMesh;
+    const staticPoints = [];
+    const neighborsMap = {};
     const dynamicLines = [];
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -44,44 +44,65 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setClearColor(0x196984);
 
-      // Geometría básica
+      // Geometría base
       const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
 
-      // Carga textura de continentes
+      // Cargar textura de continentes
       const textureURL = 'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png';
       new THREE.TextureLoader().load(
         textureURL,
         tex => {
-          console.log('✅ Texture loaded');
           earthMesh = new THREE.Mesh(
             sphereGeo,
             new THREE.MeshBasicMaterial({ map: tex, transparent: true })
           );
           scene.add(earthMesh);
 
-          // Red estática (wireframe) ligeramente por encima
+          // Generar puntos estáticos y vecinos
+          buildStaticNetwork(200, 3);
+
+          // Red estática (wireframe) al nivel de superficie
           const edges = new THREE.EdgesGeometry(sphereGeo);
           const net = new THREE.LineSegments(
             edges,
             new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.1, transparent: true })
           );
-          net.renderOrder = 1;
           scene.add(net);
         },
         undefined,
         err => {
-          console.error('❌ Texture error:', err);
+          console.error('Error cargando textura:', err);
           earthMesh = new THREE.Mesh(
             sphereGeo,
             new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
           );
           scene.add(earthMesh);
+          buildStaticNetwork(200, 3);
         }
       );
 
       // Eventos
       window.addEventListener('resize', onWindowResize);
-      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('pointermove', onPointerMove);
+    }
+
+    function buildStaticNetwork(nPoints, k) {
+      // Distribuir puntos aleatorios en superficie
+      for (let i = 0; i < nPoints; i++) {
+        const u = Math.random() * 2 - 1;
+        const theta = Math.acos(u);
+        const phi = Math.random() * Math.PI * 2;
+        const x = Math.sin(theta) * Math.cos(phi);
+        const y = Math.cos(theta);
+        const z = Math.sin(theta) * Math.sin(phi);
+        staticPoints.push(new THREE.Vector3(x, y, z));
+      }
+      // Calcular vecinos más cercanos
+      staticPoints.forEach((v, i) => {
+        const dists = staticPoints.map((w, j) => ({ j, d: v.distanceTo(w) })).filter(o => o.j !== i);
+        dists.sort((a, b) => a.d - b.d);
+        neighborsMap[i] = dists.slice(0, k).map(o => o.j);
+      });
     }
 
     function onWindowResize() {
@@ -90,49 +111,64 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    function onMouseMove(event) {
+    function onPointerMove(event) {
       if (!earthMesh) return;
-      // Convertir coordenadas de puntero a NDC (-1 a +1)
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
 
       const hit = raycaster.intersectObject(earthMesh)[0];
       if (hit) {
-        // Punto de impacto en superficie
-        const pt = hit.point.clone();
-        // Punto ligeramente exterior para garantizar visibilidad
-        const out = pt.clone().normalize().multiplyScalar(1.02);
-
-        // Crear línea en superficie
-        const geo = new THREE.BufferGeometry().setFromPoints([pt, out]);
-        const mat = new THREE.LineBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: 0.6,
-          depthTest: false  // asegura que esté al frente
+        // Encontrar punto estático más cercano
+        const p = hit.point.clone().normalize();
+        let bestIndex = 0;
+        let minDist = Infinity;
+        staticPoints.forEach((v, i) => {
+          const d = v.distanceTo(p);
+          if (d < minDist) { minDist = d; bestIndex = i; }
         });
-        const line = new THREE.Line(geo, mat);
-        line.renderOrder = 2;
-        scene.add(line);
-        dynamicLines.push(line);
+
+        // Para cada vecino, crear línea animada
+        neighborsMap[bestIndex].forEach(j => {
+          const start = staticPoints[bestIndex];
+          const end = staticPoints[j];
+          dynamicLines.push(new AnimatedLine(start, end));
+        });
+      }
+    }
+
+    class AnimatedLine {
+      constructor(start, end) {
+        this.start = start;
+        this.end = end;
+        this.t = 0;
+        this.geometry = new THREE.BufferGeometry().setFromPoints([start, start]);
+        this.material = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthTest: false });
+        this.line = new THREE.Line(this.geometry, this.material);
+        this.line.renderOrder = 2;
+        scene.add(this.line);
+      }
+      update(delta) {
+        this.t = Math.min(this.t + delta * 0.5, 1); // velocidad de crecimiento
+        const mid = this.start.clone().lerp(this.end, this.t);
+        this.geometry.setFromPoints([this.start, mid]);
+        if (this.t >= 1) {
+          return true; // marcado para remover cuando terminado
+        }
+        return false;
       }
     }
 
     function animate() {
       requestAnimationFrame(animate);
+      const delta = 0.016; // aprox 60fps
+      // Rotación de la esfera y red
+      scene.traverse(obj => { if (obj.isMesh) obj.rotation.y += 0.0005; });
 
-      // Rotar todos los meshes
-      scene.traverse(obj => {
-        if (obj.isMesh) obj.rotation.y += 0.0005;
-      });
-
-      // Desvanecer líneas dinámicas
+      // Actualizar líneas animadas
       for (let i = dynamicLines.length - 1; i >= 0; i--) {
-        const ln = dynamicLines[i];
-        ln.material.opacity -= 0.02;
-        if (ln.material.opacity <= 0) {
-          scene.remove(ln);
+        const done = dynamicLines[i].update(delta);
+        if (done) {
           dynamicLines.splice(i, 1);
         }
       }
