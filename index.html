@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hero 3D Conexiones Dinámicas</title>
+  <title>Hero 3D Conexiones Reactivas</title>
   <style>
     html, body { margin: 0; padding: 0; width:100%; height:100%; overflow:hidden; background-color: #196984; }
     canvas { display: block; }
@@ -20,17 +20,15 @@
     const dynamicLines = [];
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    let lastAuto = performance.now();
-    const autoInterval = 200;
-    let lastPointer = 0;
-    const pointerInterval = 120;
+    let lastPointerTime = 0;
+    const pointerThrottle = 100; // ms
 
     init();
     animate();
 
     function init() {
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.set(0, 0, 2.5);
 
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('heroCanvas'), antialias: true });
@@ -40,6 +38,7 @@
 
       const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
 
+      // Carga de textura de continentes
       new THREE.TextureLoader().load(
         'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png',
         tex => {
@@ -48,14 +47,14 @@
             new THREE.MeshBasicMaterial({ map: tex, transparent: true })
           );
           scene.add(earthMesh);
-          buildStaticNetwork(300, 3);  // más nodos para densidad
+
+          // Construye la red estática  
+          buildStaticNetwork(300, 3);
         },
         undefined,
-        () => {
-          earthMesh = new THREE.Mesh(
-            sphereGeo,
-            new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
-          );
+        err => {
+          console.error('Error cargando textura:', err);
+          earthMesh = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
           scene.add(earthMesh);
           buildStaticNetwork(300, 3);
         }
@@ -66,57 +65,65 @@
     }
 
     function buildStaticNetwork(nPoints, k) {
-      // Genera nodos aleatorios sobre la esfera
+      // Genera nodos aleatorios en la superficie
       for (let i = 0; i < nPoints; i++) {
         const u = Math.random() * 2 - 1;
         const theta = Math.acos(u);
-        const phi = Math.random() * 2 * Math.PI;
+        const phi = Math.random() * Math.PI * 2;
         const x = Math.sin(theta) * Math.cos(phi);
         const y = Math.cos(theta);
         const z = Math.sin(theta) * Math.sin(phi);
         staticPoints.push(new THREE.Vector3(x, y, z));
       }
-      // Calcula k vecinos más cercanos
+      
+      // Calcula vecinos más cercanos
       staticPoints.forEach((v, i) => {
         const dists = staticPoints.map((w, j) => ({ j, d: v.distanceTo(w) })).filter(o => o.j !== i);
         dists.sort((a, b) => a.d - b.d);
         neighborsMap[i] = dists.slice(0, k).map(o => o.j);
       });
-      // Dibuja red estática
-      const edges = [];
+
+      // Dibuja red estática (líneas)
+      const edgePositions = [];
       staticPoints.forEach((v, i) => {
         neighborsMap[i].forEach(j => {
           if (j > i) {
             const w = staticPoints[j];
-            edges.push(v.x, v.y, v.z, w.x, w.y, w.z);
+            edgePositions.push(v.x, v.y, v.z, w.x, w.y, w.z);
           }
         });
       });
       const netGeo = new THREE.BufferGeometry();
-      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges, 3));
+      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
       const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.1, transparent: true });
       scene.add(new THREE.LineSegments(netGeo, netMat));
+
       // Dibuja nodos
-      const ptsArr = new Float32Array(staticPoints.length * 3);
-      staticPoints.forEach((v, i) => { ptsArr[3*i] = v.x; ptsArr[3*i+1] = v.y; ptsArr[3*i+2] = v.z; });
+      const ptsArray = new Float32Array(staticPoints.length * 3);
+      staticPoints.forEach((v, i) => {
+        ptsArray[3 * i] = v.x;
+        ptsArray[3 * i + 1] = v.y;
+        ptsArray[3 * i + 2] = v.z;
+      });
       const ptsGeo = new THREE.BufferGeometry();
-      ptsGeo.setAttribute('position', new THREE.BufferAttribute(ptsArr, 3));
-      const ptsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.02 });
+      ptsGeo.setAttribute('position', new THREE.BufferAttribute(ptsArray, 3));
+      const ptsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.015 });
       scene.add(new THREE.Points(ptsGeo, ptsMat));
     }
 
     function onWindowResize() {
-      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
     function onPointerMove(event) {
       const now = performance.now();
-      if (now - lastPointer < pointerInterval) return;
-      lastPointer = now;
+      if (now - lastPointerTime < pointerThrottle) return;
+      lastPointerTime = now;
 
       if (!earthMesh) return;
+      // Normaliza
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
@@ -124,23 +131,14 @@
       if (!hit) return;
       const p = hit.point.clone().normalize();
 
-      // Encuentra nodos estadísticos cercanos (<0.15)
-      const near = staticPoints
-        .map((v,i) => ({ i, d: v.distanceTo(p) }))
-        .filter(o => o.d < 0.15);
-      if (near.length) {
-        // Conecta cada cercano con sus vecinos
-        near.forEach(o => {
-          neighborsMap[o.i].forEach(j => {
-            dynamicLines.push(new AnimatedLine(staticPoints[o.i], staticPoints[j]));
-          });
-        });
-      } else {
-        // Si no hay cercanos, une dos nodos más próximos
-        const sorted = staticPoints.map((v,i) => ({ i, d: v.distanceTo(p) })).sort((a,b) => a.d - b.d);
-        const i1 = sorted[0].i, i2 = sorted[1].i;
-        dynamicLines.push(new AnimatedLine(staticPoints[i1], staticPoints[i2]));
-      }
+      // Encuentra dos nodos más cercanos si no hay nodo justo debajo
+      let nearest = staticPoints
+        .map((v, i) => ({ i, d: v.distanceTo(p) }))
+        .sort((a, b) => a.d - b.d);
+      const [n1, n2] = [nearest[0].i, nearest[1].i];
+
+      // Crea conexión reactiva entre ellos
+      dynamicLines.push(new AnimatedLine(staticPoints[n1], staticPoints[n2]));
     }
 
     class AnimatedLine {
@@ -149,19 +147,19 @@
         this.end = end;
         this.t = 0;
         this.geo = new THREE.BufferGeometry().setFromPoints([start, start]);
-        this.mat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, linewidth: 2, depthTest: false });
+        this.mat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthTest: false });
         this.line = new THREE.Line(this.geo, this.mat);
         this.line.userData.birth = performance.now();
         this.line.renderOrder = 2;
         scene.add(this.line);
       }
       update(delta) {
-        this.t = Math.min(this.t + delta * 0.8, 1);
+        this.t = Math.min(this.t + delta * 1.0, 1);
         const mid = this.start.clone().lerp(this.end, this.t);
         this.geo.setFromPoints([this.start, mid]);
       }
       isExpired(now) {
-        return now - this.line.userData.birth > 2000;
+        return now - this.line.userData.birth > 3000;
       }
     }
 
@@ -169,16 +167,7 @@
       requestAnimationFrame(animate);
       const now = performance.now();
 
-      // Conexiones automáticas discretas
-      if (now - lastAuto > autoInterval) {
-        lastAuto = now;
-        for (let i = 0; i < 3; i++) {
-          const idx = Math.floor(Math.random() * staticPoints.length);
-          const neigh = neighborsMap[idx][Math.floor(Math.random() * neighborsMap[idx].length)];
-          dynamicLines.push(new AnimatedLine(staticPoints[idx], staticPoints[neigh]));
-        }
-      }
-      // Actualizar líneas animadas
+      // Actualiza líneas dinámicas
       for (let i = dynamicLines.length - 1; i >= 0; i--) {
         const al = dynamicLines[i];
         al.update(0.016);
@@ -187,8 +176,11 @@
           dynamicLines.splice(i, 1);
         }
       }
-      // Rotar todos
-      scene.traverse(o => { if (o.isMesh || o.isLineSegments || o.isPoints) o.rotation.y += 0.0005; });
+
+      // Rota todo
+      scene.traverse(o => {
+        if (o.isMesh || o.isLineSegments || o.isPoints) o.rotation.y += 0.0005;
+      });
       renderer.render(scene, camera);
     }
   </script>
