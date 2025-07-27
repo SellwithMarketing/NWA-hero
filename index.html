@@ -7,8 +7,7 @@
   <style>
     html, body {
       margin: 0; padding: 0;
-      width:100%; height:100%;
-      overflow:hidden;
+      width:100%; height:100%; overflow:hidden;
       background-color: #196984;
     }
     canvas { display: block; }
@@ -29,72 +28,68 @@
     animate();
 
     function init() {
-      // Escena y cámara
+      // 1. Escena y cámara
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+      camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
       camera.position.set(0, 0, 2.5);
 
-      // Renderer
+      // 2. Renderer
       renderer = new THREE.WebGLRenderer({
         canvas: document.getElementById('heroCanvas'),
         antialias: true
       });
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(devicePixelRatio);
+      renderer.setSize(innerWidth, innerHeight);
       renderer.setClearColor(0x196984);
 
-      // Geometría de la esfera
+      // 3. Geometría de la esfera
       const geom = new THREE.SphereGeometry(1, 64, 64);
 
-      // Carga de tu textura de continentes (renómbrala a "continents.png")
+      // 4. Textura desde GitHub RAW (sin espacios ni fallos de path)
+      const textureURL = 'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/Tierra%20transparenteMapa%20.png';
       new THREE.TextureLoader().load(
-        './continents.png',
+        textureURL,
         tex => {
+          console.log('🌍 Textura cargada con éxito');
           const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
           earthMesh = new THREE.Mesh(geom, mat);
           scene.add(earthMesh);
         },
         undefined,
         err => {
-          console.error('No pudo cargar continents.png:', err);
-          // Fallback wireframe
-          const wireMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
-          earthMesh = new THREE.Mesh(geom, wireMat);
+          console.error('❌ Error cargando textura:', err);
+          const wire = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+          earthMesh = new THREE.Mesh(geom, wire);
           scene.add(earthMesh);
         }
       );
 
-      // Eventos
+      // 5. Eventos
       window.addEventListener('resize', onWindowResize);
       window.addEventListener('pointermove', onPointerMove);
     }
 
     function onWindowResize() {
-      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.aspect = innerWidth/innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(innerWidth, innerHeight);
     }
 
-    function onPointerMove(event) {
+    function onPointerMove(e) {
       if (!earthMesh) return;
-      // Coordenadas normalizadas [-1,1]
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      // Coordenadas de ratón normalizadas
+      mouse.x = (e.clientX/innerWidth)*2 - 1;
+      mouse.y = -(e.clientY/innerHeight)*2 + 1;
       raycaster.setFromCamera(mouse, camera);
 
       const hit = raycaster.intersectObject(earthMesh)[0];
       if (hit) {
         const pt = hit.point.clone();
-        const lineGeo = new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(0, 0, 0),
-          pt
+        const lg = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0,0,0), pt
         ]);
-        const lineMat = new THREE.LineBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: 0.15
-        });
-        const ln = new THREE.Line(lineGeo, lineMat);
+        const lm = new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:0.15 });
+        const ln = new THREE.Line(lg, lm);
         scene.add(ln);
         lines.push(ln);
       }
@@ -104,13 +99,13 @@
       requestAnimationFrame(animate);
       if (earthMesh) earthMesh.rotation.y += 0.0007;
 
-      // Desvanecer y eliminar líneas antiguas
-      for (let i = lines.length - 1; i >= 0; i--) {
+      // Desvanecer líneas
+      for (let i = lines.length-1; i>=0; i--) {
         const ln = lines[i];
         ln.material.opacity -= 0.005;
         if (ln.material.opacity <= 0) {
           scene.remove(ln);
-          lines.splice(i, 1);
+          lines.splice(i,1);
         }
       }
 
