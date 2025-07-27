@@ -1,31 +1,25 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Hero 3D Conexiones Reactivas Automáticas</title>
   <style>
     html, body, .text-pane, .canvas-pane, canvas {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
       overflow: hidden;
       background-color: #2488AA;
       display: flex;
-      /* Cursor personalizado en todo el hero */
-      cursor: url('https://static.wixstatic.com/media/709bfd_761fa7417772464d9ac043e332f2aabe~mv2.png') 16 16, auto !important;
     }
     .text-pane { flex: 0.45; }
     .canvas-pane { flex: 0.55; position: relative; }
     canvas {
       position: absolute;
       top: 0; left: 0;
-      width: 100%;
-      height: 100%;
+      width: 100%; height: 100%;
       display: block;
-      /* Deja el cursor al CSS, será sobreescrito por JS sólo al intersectar */
-      cursor: auto !important;
+      cursor: auto; /* valor por defecto */
     }
   </style>
 </head>
@@ -37,18 +31,19 @@
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script>
+    // --- VARIABLES GLOBALES ---
     let scene, camera, renderer, earth;
-    const points = [], original = [];
-    const neighbors = {};
+    const points = [], original = [], neighbors = {};
     let ptsGeo, netGeo;
     const influence = [];
     const ray = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     const pullR = 0.25, pullT = 3000, pullS = 2.5;
 
-    // Tu logo de cursor para when intersectamos el globo
-    const cursorLogo = "url('https://static.wixstatic.com/media/709bfd_761fa7417772464d9ac043e332f2aabe~mv2.png') 16 16, auto";
+    // 👉 Aquí definimos el cursor, apuntando a tu propio archivo Cursor.png:
+    const cursorLogo = "url('/Cursor.png') 16 16, auto";
 
+    // --- INICIALIZACIÓN ---
     init();
     animate();
 
@@ -89,116 +84,111 @@
         }
       );
 
-      window.addEventListener('resize', () => {
-        const ww = window.innerWidth * 0.55;
-        const hh = window.innerHeight;
-        camera.aspect = ww / hh;
-        camera.updateProjectionMatrix();
-        renderer.setSize(ww, hh);
-      });
-
+      window.addEventListener('resize', onResize);
       window.addEventListener('pointermove', onMove);
     }
 
-    function buildNetwork(n, k) {
-      for (let i = 0; i < n; i++) {
-        const u = Math.random() * 2 - 1;
-        const th = Math.acos(u);
-        const ph = Math.random() * Math.PI * 2;
-        const v = new THREE.Vector3(
-          Math.sin(th) * Math.cos(ph),
-          Math.cos(th),
-          Math.sin(th) * Math.sin(ph)
-        );
-        points.push(v.clone());
-        original.push(v.clone());
-      }
+    function onResize() {
+      const ww = window.innerWidth * 0.55;
+      const hh = window.innerHeight;
+      camera.aspect = ww/hh;
+      camera.updateProjectionMatrix();
+      renderer.setSize(ww, hh);
+    }
 
+    // --- CREACIÓN DE RED DE PUNTOS Y LÍNEAS ---
+    function buildNetwork(n, k) {
+      // Puntos uniformes en esfera
+      for (let i = 0; i < n; i++) {
+        const u = Math.random()*2 - 1;
+        const th = Math.acos(u);
+        const ph = Math.random()*Math.PI*2;
+        const v = new THREE.Vector3(
+          Math.sin(th)*Math.cos(ph),
+          Math.cos(th),
+          Math.sin(th)*Math.sin(ph)
+        );
+        points.push(v.clone()); original.push(v.clone());
+      }
+      // Añade algunas “regiones” densas
       const addRegion = (c, lat1, lat2, lon1, lon2) => {
         for (let i = 0; i < c; i++) {
-          const lat = (Math.random() * (lat2 - lat1) + lat1) * Math.PI/180;
-          const lon = (Math.random() * (lon2 - lon1) + lon1) * Math.PI/180;
+          const lat = (Math.random()*(lat2-lat1) + lat1)*Math.PI/180;
+          const lon = (Math.random()*(lon2-lon1) + lon1)*Math.PI/180;
           const v = new THREE.Vector3(
-            Math.cos(lat) * Math.cos(lon),
+            Math.cos(lat)*Math.cos(lon),
             Math.sin(lat),
-            Math.cos(lat) * Math.sin(lon)
+            Math.cos(lat)*Math.sin(lon)
           );
-          points.push(v.clone());
-          original.push(v.clone());
+          points.push(v.clone()); original.push(v.clone());
         }
       };
+      addRegion(20,24,49,-125,-94);
+      addRegion(10,45,60,-140,-60);
+      addRegion(10,15,30,-117,-86);
 
-      // Ejemplo: regiones de EE. UU.
-      addRegion(20, 24, 49, -125, -94);
-      addRegion(10, 45, 60, -140, -60);
-      addRegion(10, 15, 30, -117, -86);
-
-      points.forEach((v, i) => {
+      // Calcula vecinos más cercanos
+      points.forEach((v,i) => {
         const arr = points
-          .map((w, j) => ({ j, d: v.distanceTo(w) }))
+          .map((w,j)=>({j, d: v.distanceTo(w)}))
           .filter(o => o.j !== i)
-          .sort((a, b) => a.d - b.d);
-        neighbors[i] = arr.slice(0, k).map(o => o.j);
+          .sort((a,b)=>a.d - b.d);
+        neighbors[i] = arr.slice(0,k).map(o => o.j);
       });
 
-      // Aristas
+      // Crea geometría de líneas (“net”)
       const edges = [];
-      points.forEach((v, i) => {
+      points.forEach((v,i) => {
         neighbors[i].forEach(j => {
           if (j > i) {
             const w = points[j];
-            edges.push(v.x, v.y, v.z, w.x, w.y, w.z);
+            edges.push(v.x,v.y,v.z, w.x,w.y,w.z);
           }
         });
       });
       netGeo = new THREE.BufferGeometry();
-      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges, 3));
+      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges,3));
       const netMat = new THREE.LineBasicMaterial({
-        color: 0xffffff,
-        opacity: 0.5,
-        transparent: true,
-        depthTest: false
+        color: 0xffffff, opacity:0.5, transparent:true, depthTest:false
       });
       scene.add(new THREE.LineSegments(netGeo, netMat));
 
-      // Puntos
+      // Crea geometría de puntos
       const pa = new Float32Array(points.length * 3);
-      points.forEach((v, i) => {
+      points.forEach((v,i) => {
         pa[3*i]   = v.x;
         pa[3*i+1] = v.y;
         pa[3*i+2] = v.z;
       });
       ptsGeo = new THREE.BufferGeometry();
-      ptsGeo.setAttribute('position', new THREE.BufferAttribute(pa, 3));
-      const pm = new THREE.PointsMaterial({ color: 0xffffff, size: 0.013 });
+      ptsGeo.setAttribute('position', new THREE.BufferAttribute(pa,3));
+      const pm = new THREE.PointsMaterial({ color:0xffffff, size:0.013 });
       scene.add(new THREE.Points(ptsGeo, pm));
     }
 
+    // --- DETECCIÓN DE MOUSE + CURSOR + EFECTO PULL ---
     function onMove(e) {
       if (!earth) return;
 
-      // 1. Normaliza coordenadas del ratón
+      // Normaliza coords del ratón al espacio NDC
       const r = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
-      mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+      mouse.x = ((e.clientX - r.left)/r.width) * 2 - 1;
+      mouse.y = -((e.clientY - r.top)/r.height) * 2 + 1;
 
-      // 2. Lanza el raycaster
+      // Raycast hacia el globo
       ray.setFromCamera(mouse, camera);
       const hits = ray.intersectObject(earth);
 
-      // 3. Ajusta inline style del cursor SOLO si intersecta
-      if (hits.length) {
-        renderer.domElement.style.cursor = cursorLogo;
-      } else {
-        // Al limpiar el inline style, vuelve a usar tu CSS declarado más arriba
-        renderer.domElement.style.cursor = '';
-      }
+      // 🔄 Cambia el cursor INLINE (solo cuando intersecta)
+      renderer.domElement.style.cursor = hits.length
+        ? cursorLogo
+        : 'auto';
 
-      // 4. Lógica de “tirón” (pull) solo si golpea
+      // Si golpea, activamos el “tirón”
       if (hits[0]) {
         const p = hits[0].point.clone().normalize();
         const now = performance.now();
-        points.forEach((v, i) => {
+        points.forEach((v,i) => {
           if (v.distanceTo(p) < pullR) {
             influence.push({ i, target: p.clone(), t: now });
           }
@@ -206,12 +196,15 @@
       }
     }
 
+    // --- ANIMACIÓN ---
     function animate() {
       requestAnimationFrame(animate);
+      // Rota cada mesh/geom
       scene.children.forEach(o => {
         if (o.geometry) o.rotation.y += 0.0005;
       });
 
+      // Aplicación del “pull” con easing
       const now = performance.now();
       for (let i = influence.length - 1; i >= 0; i--) {
         const inf = influence[i];
@@ -225,9 +218,9 @@
         }
       }
 
-      // Actualiza posiciones de puntos y líneas
+      // Actualiza buffers de puntos y líneas
       const pArr = ptsGeo.attributes.position.array;
-      points.forEach((v, i) => {
+      points.forEach((v,i) => {
         pArr[3*i]   = v.x;
         pArr[3*i+1] = v.y;
         pArr[3*i+2] = v.z;
@@ -236,7 +229,7 @@
 
       const nArr = netGeo.attributes.position.array;
       let ptr = 0;
-      points.forEach((v, i) => {
+      points.forEach((v,i) => {
         neighbors[i].forEach(j => {
           if (j > i) {
             const w = points[j];
