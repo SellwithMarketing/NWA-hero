@@ -65,7 +65,6 @@
           buildStaticNetwork(300,3);
         }
       );
-
       window.addEventListener('resize',onWindowResize);
       window.addEventListener('pointermove',onPointerMove);
     }
@@ -75,7 +74,11 @@
         const u=Math.random()*2-1;
         const theta=Math.acos(u);
         const phi=Math.random()*2*Math.PI;
-        const v=new THREE.Vector3(Math.sin(theta)*Math.cos(phi),Math.cos(theta),Math.sin(theta)*Math.sin(phi));
+        const v=new THREE.Vector3(
+          Math.sin(theta)*Math.cos(phi),
+          Math.cos(theta),
+          Math.sin(theta)*Math.sin(phi)
+        );
         staticPoints.push(v.clone()); originalPoints.push(v.clone());
       }
       staticPoints.forEach((v,i)=>{
@@ -83,25 +86,29 @@
         d.sort((a,b)=>a.d-b.d);
         neighborsMap[i]=d.slice(0,k).map(o=>o.j);
       });
-      // líneas
-      const arr=[];
+      // líneas estáticas permanentes más visibles
+      const edgeArr=[];
       staticPoints.forEach((v,i)=>{
-        neighborsMap[i].forEach(j=>{ if(j>i){ const w=staticPoints[j]; arr.push(v.x,v.y,v.z,w.x,w.y,w.z);}});
+        neighborsMap[i].forEach(j=>{
+          if(j>i){ const w=staticPoints[j]; edgeArr.push(v.x,v.y,v.z, w.x,w.y,w.z); }
+        });
       });
-      netGeo=new THREE.BufferGeometry(); netGeo.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));
-      scene.add(new THREE.LineSegments(netGeo,new THREE.LineBasicMaterial({ color:0xffffff, opacity:0.1, transparent:true })));
+      netGeo=new THREE.BufferGeometry();
+      netGeo.setAttribute('position',new THREE.Float32BufferAttribute(edgeArr,3));
+      const netMat=new THREE.LineBasicMaterial({ color:0xffffff, opacity:0.3, transparent:true, linewidth:1 });
+      scene.add(new THREE.LineSegments(netGeo, netMat));
       // puntos
       const ptsArr=new Float32Array(staticPoints.length*3);
       staticPoints.forEach((v,i)=>{ ptsArr[3*i]=v.x; ptsArr[3*i+1]=v.y; ptsArr[3*i+2]=v.z; });
       ptsGeo=new THREE.BufferGeometry(); ptsGeo.setAttribute('position',new THREE.BufferAttribute(ptsArr,3));
-      scene.add(new THREE.Points(ptsGeo,new THREE.PointsMaterial({ color:0xffffff, size:0.02 })));
+      const ptsMat=new THREE.PointsMaterial({ color:0xffffff, size:0.02 });
+      scene.add(new THREE.Points(ptsGeo, ptsMat));
     }
 
     function onWindowResize(){
       const paneWidth=window.innerWidth*0.55;
       const paneHeight=window.innerHeight;
-      camera.aspect=paneWidth/paneHeight;
-      camera.updateProjectionMatrix();
+      camera.aspect=paneWidth/paneHeight; camera.updateProjectionMatrix();
       renderer.setSize(paneWidth,paneHeight);
     }
 
@@ -113,11 +120,8 @@
       raycaster.setFromCamera(mouse,camera);
       const hit=raycaster.intersectObject(earthMesh)[0];
       if(!hit) return;
-      const p=hit.point.clone().normalize();
-      const now=performance.now();
-      staticPoints.forEach((v,i)=>{
-        if(v.distanceTo(p)<pullRadius) influences.push({ index:i, target:p.clone(), birth:now });
-      });
+      const p=hit.point.clone().normalize(); const now=performance.now();
+      staticPoints.forEach((v,i)=>{ if(v.distanceTo(p)<pullRadius) influences.push({index:i,target:p.clone(),birth:now}); });
     }
 
     function animate(){
@@ -130,12 +134,11 @@
       });
       // actualizar geometrías
       const posPts=ptsGeo.attributes.position.array;
-      staticPoints.forEach((v,i)=>{ posPts[3*i]=v.x; posPts[3*i+1]=v.y; posPts[3*i+2]=v.z; });
-      ptsGeo.attributes.position.needsUpdate=true;
-      const posNet=netGeo.attributes.position.array;
-      let ptr=0;
+      staticPoints.forEach((v,i)=>{ posPts[3*i]=v.x;posPts[3*i+1]=v.y;posPts[3*i+2]=v.z; }); ptsGeo.attributes.position.needsUpdate=true;
+      const posNet=netGeo.attributes.position.array; let ptr=0;
       staticPoints.forEach((v,i)=>{ neighborsMap[i].forEach(j=>{ if(j>i){ const w=staticPoints[j]; posNet[ptr++]=v.x;posNet[ptr++]=v.y;posNet[ptr++]=v.z; posNet[ptr++]=w.x;posNet[ptr++]=w.y;posNet[ptr++]=w.z; } }); });
       netGeo.attributes.position.needsUpdate=true;
+
       scene.traverse(o=>{ if(o.isMesh||o.isLineSegments||o.isPoints) o.rotation.y+=0.0005; });
       renderer.render(scene,camera);
     }
