@@ -3,14 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Hero 3D con Red Dinámica</title>
+  <title>Hero 3D Interactivo</title>
   <style>
     html, body {
       margin: 0; padding: 0;
-      width:100%; height:100%; overflow:hidden;
+      width:100%; height:100%;
+      overflow:hidden;
       background-color: #196984;
     }
-    canvas { display: block; }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -20,145 +25,123 @@
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js';
 
     let scene, camera, renderer, earthMesh;
-    const staticPoints = [];
-    const neighborsMap = {};
-    const dynamicLines = [];
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
+    const dynamicLines = [];
 
     init();
     animate();
 
     function init() {
-      // Escena y cámara
+      // 1) Escena & cámara
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
       camera.position.set(0, 0, 2.5);
 
-      // Renderer
-      renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('heroCanvas'), antialias: true });
-      renderer.setSize(innerWidth, innerHeight);
-      renderer.setPixelRatio(devicePixelRatio);
+      // 2) Renderer
+      renderer = new THREE.WebGLRenderer({
+        canvas: document.getElementById('heroCanvas'),
+        antialias: true
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setClearColor(0x196984);
 
-      // Geometría de la esfera
+      // 3) Geometría base
       const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
 
-      // Carga textura continents
-      const url = 'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png';
+      // 4) Carga de la textura de continentes
+      const textureURL = 'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png';
       new THREE.TextureLoader().load(
-        url,
+        textureURL,
         tex => {
+          console.log('✅ Continents texture loaded');
           earthMesh = new THREE.Mesh(
             sphereGeo,
             new THREE.MeshBasicMaterial({ map: tex, transparent: true })
           );
           scene.add(earthMesh);
 
-          buildStaticNetwork(60, 3);  // 60 puntos, 3 vecinos cada uno
+          // 5) Red estática (grid lat/long)
+          const edges = new THREE.EdgesGeometry(sphereGeo);
+          const net = new THREE.LineSegments(
+            edges,
+            new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.1, transparent: true })
+          );
+          scene.add(net);
         },
         undefined,
         err => {
-          console.error('Error textura:', err);
-          earthMesh = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
+          console.error('❌ Error loading texture:', err);
+          // Fallback a wireframe
+          earthMesh = new THREE.Mesh(
+            sphereGeo,
+            new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
+          );
           scene.add(earthMesh);
-          buildStaticNetwork(60, 3);
         }
       );
 
-      // Eventos
-      window.addEventListener('resize', onResize);
-      window.addEventListener('pointermove', onPointer);
+      // 6) Eventos
+      window.addEventListener('resize', onWindowResize, false);
+      window.addEventListener('mousemove', onMouseMove, false);
     }
 
-    function buildStaticNetwork(nPoints, k) {
-      // Genera puntos aleatorios en superficie
-      for (let i = 0; i < nPoints; i++) {
-        const u = Math.random()*2 - 1;
-        const theta = Math.acos(u);
-        const phi = Math.random()*Math.PI*2;
-        const x = Math.sin(theta)*Math.cos(phi);
-        const y = Math.cos(theta);
-        const z = Math.sin(theta)*Math.sin(phi);
-        staticPoints.push(new THREE.Vector3(x, y, z));
-      }
-      // Calcula vecinos
-      for (let i = 0; i < nPoints; i++) {
-        const dists = [];
-        for (let j = 0; j < nPoints; j++) {
-          if (i === j) continue;
-          dists.push({ j, d: staticPoints[i].distanceTo(staticPoints[j]) });
-        }
-        dists.sort((a,b)=>a.d-b.d);
-        neighborsMap[i] = dists.slice(0, k).map(o=>o.j);
-      }
-      // Construye líneas estáticas
-      const positions = [];
-      for (let i = 0; i < nPoints; i++) {
-        neighborsMap[i].forEach(j => {
-          // evitar duplicados: solo si j > i
-          if (j > i) {
-            const v1 = staticPoints[i];
-            const v2 = staticPoints[j];
-            positions.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
-          }
-        });
-      }
-      const geom = new THREE.BufferGeometry();
-      geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      const mat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.1, transparent: true });
-      const staticNet = new THREE.LineSegments(geom, mat);
-      scene.add(staticNet);
-    }
-
-    function onResize() {
-      camera.aspect = innerWidth/innerHeight;
+    function onWindowResize() {
+      camera.aspect = window.innerWidth/window.innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth, innerHeight);
+      renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    function onPointer(e) {
+    function onMouseMove(event) {
       if (!earthMesh) return;
-      // Normaliza coords
-      mouse.x = (e.clientX/innerWidth)*2 - 1;
-      mouse.y = -(e.clientY/innerHeight)*2 + 1;
+      // Debug para confirmar que llega
+      console.log('🖱️ mousemove', event.clientX, event.clientY);
+
+      // Coordenadas normalizadas [-1,1]
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+
+      // Raycast contra la esfera texturizada
       raycaster.setFromCamera(mouse, camera);
       const hit = raycaster.intersectObject(earthMesh)[0];
       if (hit) {
-        // Punto de impacto
-        const p = hit.point.clone().normalize(); // normalizar para superficie
-        // Encuentra punto estático más cercano
-        let best = 0, bd = Infinity;
-        staticPoints.forEach((v,i) => {
-          const d = v.distanceTo(p);
-          if (d < bd) { bd = d; best = i; }
+        console.log('🎯 hit at', hit.point);
+        // Línea radial del centro al punto
+        const pts = [
+          new THREE.Vector3(0, 0, 0),
+          hit.point.clone()
+        ];
+        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+        const mat = new THREE.LineBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.3
         });
-        // Conectar con sus vecinos
-        neighborsMap[best].forEach(j => {
-          const v1 = staticPoints[best];
-          const v2 = staticPoints[j];
-          const geom = new THREE.BufferGeometry().setFromPoints([v1, v2]);
-          const mat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.5, transparent: true });
-          const ln = new THREE.Line(geom, mat);
-          scene.add(ln);
-          dynamicLines.push(ln);
-        });
+        const ln = new THREE.Line(geo, mat);
+        scene.add(ln);
+        dynamicLines.push(ln);
       }
     }
 
     function animate() {
       requestAnimationFrame(animate);
-      // Rotación
-      if (earthMesh) earthMesh.rotation.y += 0.0005;
-      // Desvanecer dinámicas
+
+      // Rota la esfera y su red
+      scene.traverse(obj => {
+        if (obj.isMesh) obj.rotation.y += 0.0005;
+      });
+
+      // Desvanece y elimina líneas dinámicas
       for (let i = dynamicLines.length - 1; i >= 0; i--) {
         const ln = dynamicLines[i];
-        ln.material.opacity -= 0.02;
+        ln.material.opacity -= 0.01;
         if (ln.material.opacity <= 0) {
           scene.remove(ln);
           dynamicLines.splice(i, 1);
         }
       }
+
       renderer.render(scene, camera);
     }
   </script>
