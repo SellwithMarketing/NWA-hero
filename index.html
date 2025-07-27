@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Hero 3D Interactivo</title>
+  <title>Hero 3D con Red Dinámica</title>
   <style>
     html, body {
       margin: 0; padding: 0;
@@ -19,116 +19,146 @@
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js';
 
-    let scene, camera, renderer;
-    let earthMesh, netMesh;
+    let scene, camera, renderer, earthMesh;
+    const staticPoints = [];
+    const neighborsMap = {};
     const dynamicLines = [];
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    const clickables = [];
 
     init();
     animate();
 
     function init() {
-      // 1) Escena & cámara
+      // Escena y cámara
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+      camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
       camera.position.set(0, 0, 2.5);
 
-      // 2) Renderer
-      renderer = new THREE.WebGLRenderer({
-        canvas: document.getElementById('heroCanvas'),
-        antialias: true
-      });
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      // Renderer
+      renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('heroCanvas'), antialias: true });
+      renderer.setSize(innerWidth, innerHeight);
       renderer.setPixelRatio(devicePixelRatio);
       renderer.setClearColor(0x196984);
 
-      // 3) Base sphere
-      const geom = new THREE.SphereGeometry(1, 64, 64);
+      // Geometría de la esfera
+      const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
 
-      // 4) Cargar continentes
+      // Carga textura continents
       const url = 'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png';
       new THREE.TextureLoader().load(
         url,
         tex => {
-          console.log('✅ Continents texture loaded');
           earthMesh = new THREE.Mesh(
-            geom,
+            sphereGeo,
             new THREE.MeshBasicMaterial({ map: tex, transparent: true })
           );
           scene.add(earthMesh);
-          clickables.push(earthMesh);
 
-          // 5) Red estática encima
-          netMesh = new THREE.Mesh(
-            new THREE.SphereGeometry(1.01, 32, 32),
-            new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.1 })
-          );
-          scene.add(netMesh);
+          buildStaticNetwork(60, 3);  // 60 puntos, 3 vecinos cada uno
         },
         undefined,
         err => {
-          console.error('❌ Texture error:', err);
-          earthMesh = new THREE.Mesh(
-            geom,
-            new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
-          );
+          console.error('Error textura:', err);
+          earthMesh = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
           scene.add(earthMesh);
-          clickables.push(earthMesh);
+          buildStaticNetwork(60, 3);
         }
       );
 
-      // 6) Eventos
-      window.addEventListener('resize', onWindowResize);
-      // captura en todo el window para asegurar
-      window.addEventListener('pointermove', onPointerMove);
+      // Eventos
+      window.addEventListener('resize', onResize);
+      window.addEventListener('pointermove', onPointer);
     }
 
-    function onWindowResize() {
-      camera.aspect = window.innerWidth/window.innerHeight;
+    function buildStaticNetwork(nPoints, k) {
+      // Genera puntos aleatorios en superficie
+      for (let i = 0; i < nPoints; i++) {
+        const u = Math.random()*2 - 1;
+        const theta = Math.acos(u);
+        const phi = Math.random()*Math.PI*2;
+        const x = Math.sin(theta)*Math.cos(phi);
+        const y = Math.cos(theta);
+        const z = Math.sin(theta)*Math.sin(phi);
+        staticPoints.push(new THREE.Vector3(x, y, z));
+      }
+      // Calcula vecinos
+      for (let i = 0; i < nPoints; i++) {
+        const dists = [];
+        for (let j = 0; j < nPoints; j++) {
+          if (i === j) continue;
+          dists.push({ j, d: staticPoints[i].distanceTo(staticPoints[j]) });
+        }
+        dists.sort((a,b)=>a.d-b.d);
+        neighborsMap[i] = dists.slice(0, k).map(o=>o.j);
+      }
+      // Construye líneas estáticas
+      const positions = [];
+      for (let i = 0; i < nPoints; i++) {
+        neighborsMap[i].forEach(j => {
+          // evitar duplicados: solo si j > i
+          if (j > i) {
+            const v1 = staticPoints[i];
+            const v2 = staticPoints[j];
+            positions.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+          }
+        });
+      }
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      const mat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.1, transparent: true });
+      const staticNet = new THREE.LineSegments(geom, mat);
+      scene.add(staticNet);
+    }
+
+    function onResize() {
+      camera.aspect = innerWidth/innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(innerWidth, innerHeight);
     }
 
-    function onPointerMove(evt) {
-      // DEBUG: ver que se dispare
-      console.log('🖱️ pointermove', evt.clientX, evt.clientY);
-
+    function onPointer(e) {
       if (!earthMesh) return;
-      // normalizar
-      mouse.x = (evt.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = - (evt.clientY / window.innerHeight) * 2 + 1;
+      // Normaliza coords
+      mouse.x = (e.clientX/innerWidth)*2 - 1;
+      mouse.y = -(e.clientY/innerHeight)*2 + 1;
       raycaster.setFromCamera(mouse, camera);
-
-      // intersectar todo lo clickable
-      const hits = raycaster.intersectObjects(clickables, false);
-      if (hits.length) {
-        console.log('🎯 hit at', hits[0].point);
-        const pt = hits[0].point.clone();
-        const lineGeo = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(0,0,0), pt ]);
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
-        const ln = new THREE.Line(lineGeo, lineMat);
-        scene.add(ln);
-        dynamicLines.push(ln);
+      const hit = raycaster.intersectObject(earthMesh)[0];
+      if (hit) {
+        // Punto de impacto
+        const p = hit.point.clone().normalize(); // normalizar para superficie
+        // Encuentra punto estático más cercano
+        let best = 0, bd = Infinity;
+        staticPoints.forEach((v,i) => {
+          const d = v.distanceTo(p);
+          if (d < bd) { bd = d; best = i; }
+        });
+        // Conectar con sus vecinos
+        neighborsMap[best].forEach(j => {
+          const v1 = staticPoints[best];
+          const v2 = staticPoints[j];
+          const geom = new THREE.BufferGeometry().setFromPoints([v1, v2]);
+          const mat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.5, transparent: true });
+          const ln = new THREE.Line(geom, mat);
+          scene.add(ln);
+          dynamicLines.push(ln);
+        });
       }
     }
 
     function animate() {
       requestAnimationFrame(animate);
-      // rotar solo meshes
-      [earthMesh, netMesh].forEach(m => { if (m) m.rotation.y += 0.0005; });
-
-      // fade dinámico
+      // Rotación
+      if (earthMesh) earthMesh.rotation.y += 0.0005;
+      // Desvanecer dinámicas
       for (let i = dynamicLines.length - 1; i >= 0; i--) {
         const ln = dynamicLines[i];
-        ln.material.opacity -= 0.01;
+        ln.material.opacity -= 0.02;
         if (ln.material.opacity <= 0) {
           scene.remove(ln);
           dynamicLines.splice(i, 1);
         }
       }
-
       renderer.render(scene, camera);
     }
   </script>
