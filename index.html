@@ -10,11 +10,7 @@
       width:100%; height:100%; overflow:hidden;
       background-color: #196984;
     }
-    canvas { 
-      position: absolute;
-      top: 0; left: 0;
-      display: block;
-    }
+    canvas { display: block; }
   </style>
 </head>
 <body>
@@ -23,59 +19,69 @@
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js';
 
-    let scene, camera, renderer, earthMesh;
+    let scene, camera, renderer;
+    let earthMesh, netMesh;
     const dynamicLines = [];
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
+    const clickables = [];
 
     init();
     animate();
 
     function init() {
-      // Escena
+      // 1) Escena & cámara
       scene = new THREE.Scene();
-
-      // Cámara
       camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
       camera.position.set(0, 0, 2.5);
 
-      // Renderer
-      renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('heroCanvas'), antialias: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
+      // 2) Renderer
+      renderer = new THREE.WebGLRenderer({
+        canvas: document.getElementById('heroCanvas'),
+        antialias: true
+      });
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(devicePixelRatio);
       renderer.setClearColor(0x196984);
 
-      // Geometría base de la Tierra
-      const baseGeo = new THREE.SphereGeometry(1, 64, 64);
+      // 3) Base sphere
+      const geom = new THREE.SphereGeometry(1, 64, 64);
 
-      // 1) Textura de continentes desde GitHub RAW
-      const textureURL = 'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png';
+      // 4) Cargar continentes
+      const url = 'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png';
       new THREE.TextureLoader().load(
-        textureURL,
+        url,
         tex => {
-          console.log('🌍 Textura de continentes cargada');
-          earthMesh = new THREE.Mesh(baseGeo, new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+          console.log('✅ Continents texture loaded');
+          earthMesh = new THREE.Mesh(
+            geom,
+            new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+          );
           scene.add(earthMesh);
+          clickables.push(earthMesh);
 
-          // 2) Red estática (wireframe) justo encima
-          const wireMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, opacity: 0.2, transparent: true });
-          const netMesh = new THREE.Mesh(
-            new THREE.SphereGeometry(1.02, 32, 32),
-            wireMat
+          // 5) Red estática encima
+          netMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(1.01, 32, 32),
+            new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.1 })
           );
           scene.add(netMesh);
         },
         undefined,
         err => {
-          console.error('❌ Error cargando la textura:', err);
-          // fallback: esfera wireframe sin continente
-          earthMesh = new THREE.Mesh(baseGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
+          console.error('❌ Texture error:', err);
+          earthMesh = new THREE.Mesh(
+            geom,
+            new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
+          );
           scene.add(earthMesh);
+          clickables.push(earthMesh);
         }
       );
 
-      // Eventos
+      // 6) Eventos
       window.addEventListener('resize', onWindowResize);
+      // captura en todo el window para asegurar
       window.addEventListener('pointermove', onPointerMove);
     }
 
@@ -85,22 +91,24 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    function onPointerMove(event) {
+    function onPointerMove(evt) {
+      // DEBUG: ver que se dispare
+      console.log('🖱️ pointermove', evt.clientX, evt.clientY);
+
       if (!earthMesh) return;
-      // Debug
-      // console.log('pointermove', event.clientX, event.clientY);
-
-      // Convierte a NDC
-      mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-      mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
-
+      // normalizar
+      mouse.x = (evt.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = - (evt.clientY / window.innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
-      const hit = raycaster.intersectObject(earthMesh)[0];
-      if (hit) {
-        const pt = hit.point.clone();
-        const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), pt]);
-        const mat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
-        const ln = new THREE.Line(geo, mat);
+
+      // intersectar todo lo clickable
+      const hits = raycaster.intersectObjects(clickables, false);
+      if (hits.length) {
+        console.log('🎯 hit at', hits[0].point);
+        const pt = hits[0].point.clone();
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(0,0,0), pt ]);
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
+        const ln = new THREE.Line(lineGeo, lineMat);
         scene.add(ln);
         dynamicLines.push(ln);
       }
@@ -108,7 +116,21 @@
 
     function animate() {
       requestAnimationFrame(animate);
+      // rotar solo meshes
+      [earthMesh, netMesh].forEach(m => { if (m) m.rotation.y += 0.0005; });
 
-      // Rota la esfera texturizada y la red
-      scene.traverse(obj => {
-        if (obj.
+      // fade dinámico
+      for (let i = dynamicLines.length - 1; i >= 0; i--) {
+        const ln = dynamicLines[i];
+        ln.material.opacity -= 0.01;
+        if (ln.material.opacity <= 0) {
+          scene.remove(ln);
+          dynamicLines.splice(i, 1);
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>
