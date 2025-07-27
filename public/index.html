@@ -16,57 +16,69 @@
     </style>
   </head>
   <body>
+    <!-- Librerías de Three.js y OrbitControls -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/controls/OrbitControls.js"></script>
+
     <script>
+      // Escena básica
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
 
-      const sphereGeometry = new THREE.SphereGeometry(3, 32, 32);
-      const wireframe = new THREE.WireframeGeometry(sphereGeometry);
-      const globe = new THREE.LineSegments(wireframe, new THREE.LineBasicMaterial({ color: 0x00ffff }));
+      // Malla esférica tecnológica
+      const geometry = new THREE.SphereGeometry(5, 32, 32);
+      const wireframe = new THREE.WireframeGeometry(geometry);
+      const material = new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.6 });
+      const globe = new THREE.LineSegments(wireframe, material);
       scene.add(globe);
 
-      const connectionMaterial = new THREE.LineBasicMaterial({ color: 0x00ff99, transparent: true, opacity: 0.5 });
-
-      function createRandomConnection() {
-        const [lat1, lon1, lat2, lon2] = Array.from({ length: 4 }, () => Math.random() * 360);
-
-        const toXYZ = (lat, lon) => {
-          const phi = (90 - lat) * (Math.PI / 180);
-          const theta = (lon + 180) * (Math.PI / 180);
-          const r = 3.01;
-          return new THREE.Vector3(
-            r * Math.sin(phi) * Math.cos(theta),
-            r * Math.cos(phi),
-            r * Math.sin(phi) * Math.sin(theta)
-          );
-        };
-
-        const points = [toXYZ(lat1, lon1), toXYZ(lat2, lon2)];
-        const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const line = new THREE.Line(geo, connectionMaterial);
-        scene.add(line);
-      }
-
-      for (let i = 0; i < 50; i++) createRandomConnection();
-
+      // Cámara y control
+      camera.position.z = 15;
       const controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.autoRotate = true;
-      controls.autoRotateSpeed = 0.5;
+      controls.autoRotateSpeed = 1.2;
       controls.enableZoom = false;
 
-      camera.position.z = 8;
+      // Conexiones entre puntos aleatorios
+      const connectionMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.4, transparent: true });
+      function randomLatLng() {
+        return {
+          lat: Math.random() * 180 - 90,
+          lng: Math.random() * 360 - 180
+        };
+      }
 
-      window.addEventListener("resize", () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      });
+      function createConnections(count) {
+        for (let i = 0; i < count; i++) {
+          const { lat: lat1, lng: lng1 } = randomLatLng();
+          const { lat: lat2, lng: lng2 } = randomLatLng();
+          const r = 5;
 
+          const x1 = r * Math.cos(lat1) * Math.cos(lng1);
+          const y1 = r * Math.sin(lat1);
+          const z1 = r * Math.cos(lat1) * Math.sin(lng1);
+
+          const x2 = r * Math.cos(lat2) * Math.cos(lng2);
+          const y2 = r * Math.sin(lat2);
+          const z2 = r * Math.cos(lat2) * Math.sin(lng2);
+
+          const points = [
+            new THREE.Vector3(x1, y1, z1),
+            new THREE.Vector3(x2, y2, z2),
+          ];
+
+          const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+          const line = new THREE.Line(lineGeo, connectionMaterial);
+          scene.add(line);
+        }
+      }
+
+      createConnections(100);
+
+      // Animación
       function animate() {
         requestAnimationFrame(animate);
         controls.update();
@@ -74,6 +86,14 @@
       }
 
       animate();
+
+      // Responsivo
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
     </script>
   </body>
 </html>
+
