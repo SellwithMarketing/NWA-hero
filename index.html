@@ -114,7 +114,12 @@
       netGeo=new THREE.BufferGeometry();
       netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges,3));
       // Opacidad permanente al 60%
-      const netMat=new THREE.LineBasicMaterial({color:0xffffff, opacity:0.5, transparent:true});
+      const netMat = new THREE.LineBasicMaterial({
+        color: 0xffffff,
+        opacity: 0.5,
+        transparent: true,
+        depthTest: false  // aseguramos que las líneas se dibujen por encima de la esfera
+      });
       scene.add(new THREE.LineSegments(netGeo,netMat));
 
       const pa=new Float32Array(points.length*3);
