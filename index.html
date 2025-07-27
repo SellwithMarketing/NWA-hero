@@ -91,10 +91,10 @@
         staticPoints.push(v.clone());
         originalPoints.push(v.clone());
       }
-      // Añadir 20 puntos extra en EE.UU. (lat 24-49, lon -125 to -66)
+      // Añadir 20 puntos extra en EE.UU.
       for (let i = 0; i < 20; i++) {
         const lat = (Math.random() * (49 - 24) + 24) * Math.PI / 180;
-        const lon = (Math.random() * (-66 + 125) - 125) * Math.PI / 180;
+        const lon = (Math.random() * (31) - 125) * Math.PI / 180; // -125 a -94
         const v = new THREE.Vector3(
           Math.cos(lat) * Math.cos(lon),
           Math.sin(lat),
@@ -102,6 +102,28 @@
         );
         staticPoints.push(v.clone());
         originalPoints.push(v.clone());
+      }
+      // Puntos extra en Canadá (delantero)
+      for (let i = 0; i < 10; i++) {
+        const lat = (Math.random() * (60 - 45) + 45) * Math.PI / 180;
+        const lon = (Math.random() * (80) - 140) * Math.PI / 180; // -140 a -60
+        const v = new THREE.Vector3(
+          Math.cos(lat) * Math.cos(lon),
+          Math.sin(lat),
+          Math.cos(lat) * Math.sin(lon)
+        );
+        staticPoints.push(v.clone()); originalPoints.push(v.clone());
+      }
+      // Puntos extra en México
+      for (let i = 0; i < 10; i++) {
+        const lat = (Math.random() * (30 - 15) + 15) * Math.PI / 180;
+        const lon = (Math.random() * (31) - 117) * Math.PI / 180; // -117 a -86
+        const v = new THREE.Vector3(
+          Math.cos(lat) * Math.cos(lon),
+          Math.sin(lat),
+          Math.cos(lat) * Math.sin(lon)
+        );
+        staticPoints.push(v.clone()); originalPoints.push(v.clone());
       }
       // Calcular vecinos k más cercanos
       staticPoints.forEach((v, i) => {
@@ -123,7 +145,7 @@
       });
       netGeo = new THREE.BufferGeometry();
       netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgeArr, 3));
-      const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.2, transparent: true });
+      const netMat = new THREE.LineBasicMaterial({ color:0xffffff, opacity:0.2, transparent:true });
       scene.add(new THREE.LineSegments(netGeo, netMat));
 
       // Nodos
@@ -135,7 +157,7 @@
       });
       ptsGeo = new THREE.BufferGeometry();
       ptsGeo.setAttribute('position', new THREE.BufferAttribute(ptsArr, 3));
-      const ptsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.015 });
+      const ptsMat = new THREE.PointsMaterial({ color:0xffffff, size:0.015 });
       scene.add(new THREE.Points(ptsGeo, ptsMat));
     }
 
@@ -150,70 +172,33 @@
     function onPointerMove(e) {
       if (!earthMesh) return;
       const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+      mouse.x = ((e.clientX - rect.left)/rect.width)*2-1;
+      mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
       raycaster.setFromCamera(mouse, camera);
       const hit = raycaster.intersectObject(earthMesh)[0];
       if (!hit) return;
       const p = hit.point.clone().normalize();
       const now = performance.now();
-      staticPoints.forEach((v, i) => {
-        if (v.distanceTo(p) < pullRadius) {
-          influences.push({ index: i, target: p.clone(), birth: now });
-        }
+      staticPoints.forEach((v,i) => {
+        if (v.distanceTo(p)<pullRadius) influences.push({index:i, target:p.clone(), birth:now});
       });
     }
 
     function animate() {
       requestAnimationFrame(animate);
-
       // Rotación automática
-      scene.traverse(o => {
-        if (o.isMesh || o.isLineSegments || o.isPoints) {
-          o.rotation.y += 0.0005;
-        }
-      });
-
-      // Efecto de imán
-      const now = performance.now();
-      for (let i = influences.length - 1; i >= 0; i--) {
-        const inf = influences[i];
-        const t = (now - inf.birth) / pullDuration;
-        if (t >= 1) {
-          staticPoints[inf.index].copy(originalPoints[inf.index]);
-          influences.splice(i, 1);
-        } else {
-          const s = Math.sin(t * Math.PI) * pullStrength;
-          staticPoints[inf.index].lerpVectors(originalPoints[inf.index], inf.target, s);
-        }
-      }
-
-      // Actualizar geometrías
-      const posPts = ptsGeo.attributes.position.array;
-      staticPoints.forEach((v, i) => {
-        posPts[3*i]   = v.x;
-        posPts[3*i+1] = v.y;
-        posPts[3*i+2] = v.z;
-      });
-      ptsGeo.attributes.position.needsUpdate = true;
-
-      const posNet = netGeo.attributes.position.array;
-      let ptr = 0;
-      staticPoints.forEach((v, i) => {
-        neighborsMap[i].forEach(j => {
-          if (j > i) {
-            const w = staticPoints[j];
-            posNet[ptr++] = v.x;
-            posNet[ptr++] = v.y;
-            posNet[ptr++] = v.z;
-            posNet[ptr++] = w.x;
-            posNet[ptr++] = w.y;
-            posNet[ptr++] = w.z;
-          }
-        });
-      });
-      netGeo.attributes.position.needsUpdate = true;
-
+      scene.traverse(o => { if(o.isMesh||o.isLineSegments||o.isPoints) o.rotation.y += 0.0005; });
+      // Imán
+      const now=performance.now();
+      for(let i=influences.length-1;i>=0;i--){
+        const inf=influences[i]; const t=(now-inf.birth)/pullDuration;
+        if(t>=1){ staticPoints[inf.index].copy(originalPoints[inf.index]); influences.splice(i,1);
+        }else{ const s=Math.sin(t*Math.PI)*pullStrength; staticPoints[inf.index].lerpVectors(originalPoints[inf.index], inf.target, s);} }
+      // Actualizar géometrías
+      const posPts=ptsGeo.attributes.position.array;
+      staticPoints.forEach((v,i)=>{posPts[3*i]=v.x; posPts[3*i+1]=v.y; posPts[3*i+2]=v.z;}); ptsGeo.attributes.position.needsUpdate=true;
+      const posNet=netGeo.attributes.position.array; let ptr=0;
+      staticPoints.forEach((v,i)=>{ neighborsMap[i].forEach(j=>{ if(j>i){ const w=staticPoints[j]; posNet[ptr++]=v.x;posNet[ptr++]=v.y;posNet[ptr++]=v.z;posNet[ptr++]=w.x;posNet[ptr++]=w.y;posNet[ptr++]=w.z;} }); }); netGeo.attributes.position.needsUpdate=true;
       renderer.render(scene, camera);
     }
   </script>
