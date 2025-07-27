@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hero 3D Conexiones Reactivas Mejoradas</title>
+  <title>Hero 3D Conexiones Reactivas Interactivas</title>
   <style>
     html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background-color:#196984; display:flex; }
     .text-pane { flex:0.45; }
@@ -19,8 +19,9 @@
 
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js';
+    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/controls/OrbitControls.js';
 
-    let scene, camera, renderer, earthMesh;
+    let scene, camera, renderer, earthMesh, controls;
     const staticPoints = [], originalPoints = [];
     const neighborsMap = {};
     let ptsGeo, netGeo;
@@ -48,6 +49,19 @@
       renderer.setSize(paneWidth, paneHeight);
       renderer.setClearColor(0x196984);
 
+      // Controles de órbita con auto-rotación
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enablePan = false;
+      controls.enableZoom = false;
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.1;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 0.5;
+
+      // Pausar auto-rotación al arrastrar
+      renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; });
+      window.addEventListener('pointerup', () => { controls.autoRotate = true; });
+
       const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
       new THREE.TextureLoader().load(
         'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png',
@@ -61,7 +75,7 @@
         },
         undefined,
         err => {
-          console.error('Error cargando textura:', err);
+          console.error('Error textura:', err);
           earthMesh = new THREE.Mesh(
             sphereGeo,
             new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
@@ -76,7 +90,6 @@
     }
 
     function buildStaticNetwork(n, k) {
-      // Puntos base uniformes
       for (let i = 0; i < n; i++) {
         const u = Math.random() * 2 - 1;
         const theta = Math.acos(u);
@@ -89,20 +102,6 @@
         staticPoints.push(v.clone());
         originalPoints.push(v.clone());
       }
-      // Sobremuestreo ligero CA/NV (10%)
-      const regionExtra = Math.floor(n * 0.1);
-      for (let i = 0; i < regionExtra; i++) {
-        const lat = (Math.random() * (42 - 32) + 32) * Math.PI / 180;
-        const lon = (Math.random() * (-114 + 124) - 124) * Math.PI / 180;
-        const v = new THREE.Vector3(
-          Math.cos(lat) * Math.cos(lon),
-          Math.sin(lat),
-          Math.cos(lat) * Math.sin(lon)
-        );
-        staticPoints.push(v.clone());
-        originalPoints.push(v.clone());
-      }
-      // Calcula vecinos
       staticPoints.forEach((v, i) => {
         const dists = staticPoints.map((w, j) => ({ j, d: v.distanceTo(w) })).filter(o => o.j !== i);
         dists.sort((a, b) => a.d - b.d);
@@ -120,9 +119,8 @@
       });
       netGeo = new THREE.BufferGeometry();
       netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgeArr, 3));
-      const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.5, transparent: true });
+      const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.2, transparent: true });
       scene.add(new THREE.LineSegments(netGeo, netMat));
-
       // Nodos
       const ptsArr = new Float32Array(staticPoints.length * 3);
       staticPoints.forEach((v, i) => {
@@ -132,7 +130,7 @@
       });
       ptsGeo = new THREE.BufferGeometry();
       ptsGeo.setAttribute('position', new THREE.BufferAttribute(ptsArr, 3));
-      const ptsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.02 });
+      const ptsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.015 });
       scene.add(new THREE.Points(ptsGeo, ptsMat));
     }
 
@@ -163,6 +161,7 @@
 
     function animate() {
       requestAnimationFrame(animate);
+      controls.update();
       const now = performance.now();
       for (let i = influences.length - 1; i >= 0; i--) {
         const inf = influences[i];
@@ -199,7 +198,7 @@
         });
       });
       netGeo.attributes.position.needsUpdate = true;
-      scene.traverse(o => { if (o.isMesh || o.isLineSegments || o.isPoints) o.rotation.y += 0.0005; });
+
       renderer.render(scene, camera);
     }
   </script>
