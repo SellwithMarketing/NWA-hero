@@ -113,7 +113,8 @@
       });
       netGeo=new THREE.BufferGeometry();
       netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges,3));
-      const netMat=new THREE.LineBasicMaterial({color:0xffffff, opacity:1, transparent:true});
+      // Opacidad permanente al 60%
+      const netMat=new THREE.LineBasicMaterial({color:0xffffff, opacity:0.6, transparent:true});
       scene.add(new THREE.LineSegments(netGeo,netMat));
 
       const pa=new Float32Array(points.length*3);
