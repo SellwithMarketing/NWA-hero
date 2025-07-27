@@ -6,9 +6,7 @@
   <title>Hero 3D Conexiones Reactivas Mejoradas</title>
   <style>
     html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background-color:#196984; display:flex; }
-    /* Texto a la izquierda: 45% */
     .text-pane { flex:0.45; }
-    /* Canvas a la derecha: 55% */
     .canvas-pane { flex:0.55; position:relative; }
     canvas { position:absolute; top:0; left:0; width:100%; height:100%; display:block; }
   </style>
@@ -23,8 +21,7 @@
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js';
 
     let scene, camera, renderer, earthMesh;
-    const staticPoints = [];
-    const originalPoints = [];
+    const staticPoints = [], originalPoints = [];
     const neighborsMap = {};
     let ptsGeo, netGeo;
     const influences = [];
@@ -33,10 +30,11 @@
 
     // Parámetros de efecto
     const pullRadius = 0.25;
-    const pullDuration = 3000; // ms
+    const pullDuration = 3000;
     const pullStrength = 2.5;
 
-    init(); animate();
+    init();
+    animate();
 
     function init() {
       scene = new THREE.Scene();
@@ -45,16 +43,12 @@
       camera = new THREE.PerspectiveCamera(60, paneWidth / paneHeight, 0.1, 1000);
       camera.position.set(0, 0, 2.5);
 
-      renderer = new THREE.WebGLRenderer({
-        canvas: document.getElementById('heroCanvas'),
-        antialias: true
-      });
+      renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('heroCanvas'), antialias: true });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(paneWidth, paneHeight);
       renderer.setClearColor(0x196984);
 
       const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
-
       new THREE.TextureLoader().load(
         'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png',
         tex => {
@@ -82,7 +76,7 @@
     }
 
     function buildStaticNetwork(n, k) {
-      // Puntos base
+      // Puntos base uniformes
       for (let i = 0; i < n; i++) {
         const u = Math.random() * 2 - 1;
         const theta = Math.acos(u);
@@ -95,13 +89,11 @@
         staticPoints.push(v.clone());
         originalPoints.push(v.clone());
       }
-      // Sobremuestreo en CA/NV
-      const regionExtra = Math.floor(n * 0.15);
+      // Sobremuestreo ligero CA/NV (10%)
+      const regionExtra = Math.floor(n * 0.1);
       for (let i = 0; i < regionExtra; i++) {
-        const latDeg = Math.random() * (42 - 32) + 32;
-        const lonDeg = Math.random() * (-114 + 124) - 124;
-        const lat = latDeg * Math.PI / 180;
-        const lon = lonDeg * Math.PI / 180;
+        const lat = (Math.random() * (42 - 32) + 32) * Math.PI / 180;
+        const lon = (Math.random() * (-114 + 124) - 124) * Math.PI / 180;
         const v = new THREE.Vector3(
           Math.cos(lat) * Math.cos(lon),
           Math.sin(lat),
@@ -112,10 +104,8 @@
       }
       // Calcula vecinos
       staticPoints.forEach((v, i) => {
-        const dists = staticPoints
-          .map((w, j) => ({ j, d: v.distanceTo(w) }))
-          .filter(o => o.j !== i)
-          .sort((a, b) => a.d - b.d);
+        const dists = staticPoints.map((w, j) => ({ j, d: v.distanceTo(w) })).filter(o => o.j !== i);
+        dists.sort((a, b) => a.d - b.d);
         neighborsMap[i] = dists.slice(0, k).map(o => o.j);
       });
       // Líneas estáticas permanentes
@@ -130,7 +120,7 @@
       });
       netGeo = new THREE.BufferGeometry();
       netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgeArr, 3));
-      const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.4, transparent: true });
+      const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.5, transparent: true });
       scene.add(new THREE.LineSegments(netGeo, netMat));
 
       // Nodos
@@ -174,7 +164,6 @@
     function animate() {
       requestAnimationFrame(animate);
       const now = performance.now();
-      // Aplica influencias
       for (let i = influences.length - 1; i >= 0; i--) {
         const inf = influences[i];
         const t = (now - inf.birth) / pullDuration;
@@ -186,7 +175,7 @@
           staticPoints[inf.index].lerpVectors(originalPoints[inf.index], inf.target, s);
         }
       }
-      // Actualiza geometrías
+      // Actualizar geometrías
       const posPts = ptsGeo.attributes.position.array;
       staticPoints.forEach((v, i) => {
         posPts[3 * i] = v.x;
@@ -210,7 +199,6 @@
         });
       });
       netGeo.attributes.position.needsUpdate = true;
-      // Rotación
       scene.traverse(o => { if (o.isMesh || o.isLineSegments || o.isPoints) o.rotation.y += 0.0005; });
       renderer.render(scene, camera);
     }
