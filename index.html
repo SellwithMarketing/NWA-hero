@@ -5,25 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Hero 3D Conexiones Reactivas Automáticas</title>
   <style>
-    /* BASE */
-    html, body {
+    /* RESET & LAYOUT */
+    html, body, .text-pane, .canvas-pane, canvas {
       margin: 0; padding: 0;
       width: 100%; height: 100%;
       overflow: hidden;
-      background-color: #2488AA;
-    }
-    body {
+      background: #2488AA;
       display: flex;
+      /* NO cursor aquí — lo controla JS */
     }
-    .text-pane {
-      flex: 0.45;
-      /* aquí iría tu contenido de texto */
-    }
+    .text-pane { flex: 0.45; }
     .canvas-pane {
       flex: 0.55;
       position: relative;
     }
-    /* canvas A BLANCO: el cursor lo pone JS */
     canvas {
       position: absolute;
       top: 0; left: 0;
@@ -40,7 +35,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script>
-    // — VARIABLES GLOBALES —
     let scene, camera, renderer, earth;
     const points = [], original = [], neighbors = {};
     let ptsGeo, netGeo;
@@ -49,19 +43,21 @@
     const mouse = new THREE.Vector2();
     const pullR = 0.25, pullT = 3000, pullS = 2.5;
 
-    // Apunta a tu propio archivo Cursor.png en la raíz del deploy (case‑sensitive)
+    // Ruta a tu Cursor.png en la raíz del deploy
     const cursorLogo = "url('/Cursor.png') 16 16, auto";
 
     init();
     animate();
 
     function init() {
+      // Escena y cámara
       scene = new THREE.Scene();
       const w = window.innerWidth * 0.55;
       const h = window.innerHeight;
       camera = new THREE.PerspectiveCamera(60, w/h, 0.1, 100);
       camera.position.set(0, 0, 2.5);
 
+      // Renderer
       renderer = new THREE.WebGLRenderer({
         canvas: document.getElementById('heroCanvas'),
         antialias: true
@@ -70,9 +66,10 @@
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setClearColor(0x2488AA);
 
+      // Construye tu red de puntos + líneas
       buildNetwork(300, 3);
 
-      // Carga del mapa de continentes
+      // Carga de mapa de continentes
       const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
       new THREE.TextureLoader().load(
         'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png',
@@ -93,21 +90,22 @@
         }
       );
 
+      // Resize
       window.addEventListener('resize', onResize);
-      // ✨ Atamos el pointermove AL CANVAS directamente
-      renderer.domElement.addEventListener('pointermove', onMove);
+      // Asegura pointermove en window
+      window.addEventListener('pointermove', onMove);
     }
 
     function onResize() {
-      const ww = window.innerWidth * 0.55;
-      const hh = window.innerHeight;
-      camera.aspect = ww/hh;
+      const w = window.innerWidth * 0.55;
+      const h = window.innerHeight;
+      camera.aspect = w/h;
       camera.updateProjectionMatrix();
-      renderer.setSize(ww, hh);
+      renderer.setSize(w, h);
     }
 
     function buildNetwork(n, k) {
-      // … (idéntico a tu buildNetwork) …
+      // Generación de puntos
       for (let i = 0; i < n; i++) {
         const u = Math.random()*2 - 1;
         const th = Math.acos(u);
@@ -117,59 +115,63 @@
           Math.cos(th),
           Math.sin(th)*Math.sin(ph)
         );
-        points.push(v.clone()); original.push(v.clone());
+        points.push(v.clone());
+        original.push(v.clone());
       }
+      // Regiones densas
       const addRegion = (c, lat1, lat2, lon1, lon2) => {
         for (let i = 0; i < c; i++) {
-          const lat = (Math.random()*(lat2-lat1)+lat1)*Math.PI/180;
-          const lon = (Math.random()*(lon2-lon1)+lon1)*Math.PI/180;
+          const lat = (Math.random()*(lat2-lat1) + lat1)*Math.PI/180;
+          const lon = (Math.random()*(lon2-lon1) + lon1)*Math.PI/180;
           const v = new THREE.Vector3(
             Math.cos(lat)*Math.cos(lon),
             Math.sin(lat),
             Math.cos(lat)*Math.sin(lon)
           );
-          points.push(v.clone()); original.push(v.clone());
+          points.push(v.clone());
+          original.push(v.clone());
         }
       };
       addRegion(20,24,49,-125,-94);
       addRegion(10,45,60,-140,-60);
       addRegion(10,15,30,-117,-86);
 
-      points.forEach((v,i) => {
+      // Vecinos más cercanos
+      points.forEach((v, i) => {
         const arr = points
-          .map((w,j)=>({j, d: v.distanceTo(w)}))
-          .filter(o=>o.j!==i)
-          .sort((a,b)=>a.d-b.d);
-        neighbors[i] = arr.slice(0,k).map(o=>o.j);
+          .map((w, j) => ({ j, d: v.distanceTo(w) }))
+          .filter(o => o.j !== i)
+          .sort((a, b) => a.d - b.d);
+        neighbors[i] = arr.slice(0, k).map(o => o.j);
       });
 
-      // Líneas
+      // Geometría de líneas
       const edges = [];
-      points.forEach((v,i)=>{
-        neighbors[i].forEach(j=>{
-          if (j>i) {
+      points.forEach((v, i) => {
+        neighbors[i].forEach(j => {
+          if (j > i) {
             const w = points[j];
-            edges.push(v.x,v.y,v.z, w.x,w.y,w.z);
+            edges.push(v.x, v.y, v.z, w.x, w.y, w.z);
           }
         });
       });
       netGeo = new THREE.BufferGeometry();
-      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges,3));
+      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges, 3));
       const netMat = new THREE.LineBasicMaterial({
-        color:0xffffff, opacity:0.5, transparent:true, depthTest:false
+        color: 0xffffff, opacity: 0.5, transparent: true, depthTest: false
       });
       scene.add(new THREE.LineSegments(netGeo, netMat));
 
-      // Puntos
-      const pa = new Float32Array(points.length*3);
-      points.forEach((v,i)=>{
+      // Geometría de puntos
+      const pa = new Float32Array(points.length * 3);
+      points.forEach((v, i) => {
         pa[3*i]   = v.x;
         pa[3*i+1] = v.y;
         pa[3*i+2] = v.z;
       });
       ptsGeo = new THREE.BufferGeometry();
-      ptsGeo.setAttribute('position', new THREE.BufferAttribute(pa,3));
-      const pm = new THREE.PointsMaterial({ color:0xffffff, size:0.013 });
+      ptsGeo.setAttribute('position', new THREE.BufferAttribute(pa, 3));
+      const pm = new THREE.PointsMaterial({ color: 0xffffff, size: 0.013 });
       scene.add(new THREE.Points(ptsGeo, pm));
     }
 
@@ -178,24 +180,27 @@
 
       const canvas = renderer.domElement;
       const rect = canvas.getBoundingClientRect();
-      mouse.x = ((e.clientX - rect.left)/rect.width)*2 -1;
-      mouse.y = -((e.clientY - rect.top)/rect.height)*2 +1;
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
       ray.setFromCamera(mouse, camera);
       const hits = ray.intersectObject(earth);
 
-      // 🔥 Override con !important
+      // Log para verificar llamada y número de impactos
+      console.log('⮕ onMove() hits =', hits.length);
+
+      // Aplica cursor-logo con !important
       if (hits.length) {
         canvas.style.setProperty('cursor', cursorLogo, 'important');
       } else {
         canvas.style.setProperty('cursor', 'auto', 'important');
       }
 
-      // Pull
+      // Efecto “pull”
       if (hits[0]) {
         const p = hits[0].point.clone().normalize();
         const now = performance.now();
-        points.forEach((v,i)=>{
+        points.forEach((v, i) => {
           if (v.distanceTo(p) < pullR) {
             influence.push({ i, target: p.clone(), t: now });
           }
@@ -205,24 +210,29 @@
 
     function animate() {
       requestAnimationFrame(animate);
-      scene.children.forEach(o => { if (o.geometry) o.rotation.y += 0.0005; });
 
+      // Rota todas las geometrías con o.geometry
+      scene.children.forEach(o => {
+        if (o.geometry) o.rotation.y += 0.0005;
+      });
+
+      // Resolución del “pull”
       const now = performance.now();
-      for (let i = influence.length-1; i >= 0; i--) {
+      for (let i = influence.length - 1; i >= 0; i--) {
         const inf = influence[i];
-        const t = (now - inf.t)/pullT;
+        const t = (now - inf.t) / pullT;
         if (t >= 1) {
           points[inf.i].copy(original[inf.i]);
-          influence.splice(i,1);
+          influence.splice(i, 1);
         } else {
-          const s = Math.sin(t*Math.PI)*pullS;
+          const s = Math.sin(t * Math.PI) * pullS;
           points[inf.i].lerpVectors(original[inf.i], inf.target, s);
         }
       }
 
-      // Update buffers…
+      // Actualiza buffers
       const pArr = ptsGeo.attributes.position.array;
-      points.forEach((v,i)=>{
+      points.forEach((v, i) => {
         pArr[3*i]   = v.x;
         pArr[3*i+1] = v.y;
         pArr[3*i+2] = v.z;
@@ -231,9 +241,9 @@
 
       const nArr = netGeo.attributes.position.array;
       let ptr = 0;
-      points.forEach((v,i)=>{
-        neighbors[i].forEach(j=>{
-          if (j>i) {
+      points.forEach((v, i) => {
+        neighbors[i].forEach(j => {
+          if (j > i) {
             const w = points[j];
             nArr[ptr++] = v.x; nArr[ptr++] = v.y; nArr[ptr++] = v.z;
             nArr[ptr++] = w.x; nArr[ptr++] = w.y; nArr[ptr++] = w.z;
