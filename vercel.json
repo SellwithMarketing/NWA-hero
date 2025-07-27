@@ -1,12 +1,11 @@
 {
   "version": 2,
   "builds": [
-    { "src": "index.html",     "use": "@vercel/static" },
-    { "src": "Cursor.png",     "use": "@vercel/static" },
-    { "src": "continentes.png","use": "@vercel/static" }
+    { "src": "**/*", "use": "@vercel/static" }
   ],
   "routes": [
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
+
