@@ -75,7 +75,7 @@
         },
         undefined,
         err => {
-          console.error('Error textura:', err);
+          console.error('Error cargando textura:', err);
           earthMesh = new THREE.Mesh(
             sphereGeo,
             new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
@@ -90,6 +90,7 @@
     }
 
     function buildStaticNetwork(n, k) {
+      // Puntos base uniformes
       for (let i = 0; i < n; i++) {
         const u = Math.random() * 2 - 1;
         const theta = Math.acos(u);
@@ -102,11 +103,13 @@
         staticPoints.push(v.clone());
         originalPoints.push(v.clone());
       }
+      // Calcula vecinos
       staticPoints.forEach((v, i) => {
         const dists = staticPoints.map((w, j) => ({ j, d: v.distanceTo(w) })).filter(o => o.j !== i);
         dists.sort((a, b) => a.d - b.d);
         neighborsMap[i] = dists.slice(0, k).map(o => o.j);
       });
+
       // Líneas estáticas permanentes
       const edgeArr = [];
       staticPoints.forEach((v, i) => {
@@ -121,6 +124,7 @@
       netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgeArr, 3));
       const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.2, transparent: true });
       scene.add(new THREE.LineSegments(netGeo, netMat));
+
       // Nodos
       const ptsArr = new Float32Array(staticPoints.length * 3);
       staticPoints.forEach((v, i) => {
@@ -180,8 +184,7 @@
         posPts[3 * i] = v.x;
         posPts[3 * i + 1] = v.y;
         posPts[3 * i + 2] = v.z;
-      });
-      ptsGeo.attributes.position.needsUpdate = true;
+      }); ptsGeo.attributes.position.needsUpdate = true;
       const posNet = netGeo.attributes.position.array;
       let ptr = 0;
       staticPoints.forEach((v, i) => {
@@ -196,9 +199,7 @@
             posNet[ptr++] = w.z;
           }
         });
-      });
-      netGeo.attributes.position.needsUpdate = true;
-
+      }); netGeo.attributes.position.needsUpdate = true;
       renderer.render(scene, camera);
     }
   </script>
