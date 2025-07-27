@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hero 3D Conexiones Dinámicas</title>
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #196984; }
+    html, body { margin: 0; padding: 0; width:100%; height:100%; overflow:hidden; background-color: #196984; }
     canvas { display: block; }
   </style>
 </head>
@@ -18,39 +18,44 @@
     const staticPoints = [];
     const neighborsMap = {};
     const dynamicLines = [];
-    const magnetLines = [];
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
+    let lastAuto = performance.now();
+    const autoInterval = 200; // ms
 
     init();
     animate();
 
     function init() {
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+      camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
       camera.position.set(0, 0, 2.5);
 
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('heroCanvas'), antialias: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(devicePixelRatio);
+      renderer.setSize(innerWidth, innerHeight);
       renderer.setClearColor(0x196984);
 
       const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
 
-      // Carga de textura
       new THREE.TextureLoader().load(
         'https://raw.githubusercontent.com/SellwithMarketing/NWA-hero/main/continentes.png',
         tex => {
-          earthMesh = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+          earthMesh = new THREE.Mesh(
+            sphereGeo,
+            new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+          );
           scene.add(earthMesh);
-          buildStaticNetwork(100, 3);
+          buildStaticNetwork(200, 3, sphereGeo);
         },
         undefined,
-        err => {
-          console.error('Error cargando textura:', err);
-          earthMesh = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
+        () => {
+          earthMesh = new THREE.Mesh(
+            sphereGeo,
+            new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
+          );
           scene.add(earthMesh);
-          buildStaticNetwork(100, 3);
+          buildStaticNetwork(200, 3, sphereGeo);
         }
       );
 
@@ -58,76 +63,119 @@
       window.addEventListener('pointermove', onPointerMove);
     }
 
-    function buildStaticNetwork(nPoints, k) {
-      // Crear nodos
+    function buildStaticNetwork(nPoints, k, sphereGeo) {
+      // Generar nodos
       for (let i = 0; i < nPoints; i++) {
-        const u = Math.random()*2 - 1;
+        const u = Math.random() * 2 - 1;
         const theta = Math.acos(u);
-        const phi = Math.random()*Math.PI*2;
-        const x = Math.sin(theta)*Math.cos(phi);
+        const phi = Math.random() * Math.PI * 2;
+        const x = Math.sin(theta) * Math.cos(phi);
         const y = Math.cos(theta);
-        const z = Math.sin(theta)*Math.sin(phi);
-        staticPoints.push(new THREE.Vector3(x,y,z));
+        const z = Math.sin(theta) * Math.sin(phi);
+        staticPoints.push(new THREE.Vector3(x, y, z));
       }
-      staticPoints.forEach((v,i) => {
-        const dists = staticPoints.map((w,j) => ({ j, d: v.distanceTo(w) })).filter(o => o.j !== i).sort((a,b)=>a.d-b.d);
+      // Calcular vecinos
+      staticPoints.forEach((v, i) => {
+        const dists = staticPoints.map((w, j) => ({ j, d: v.distanceTo(w) })).filter(o => o.j !== i);
+        dists.sort((a, b) => a.d - b.d);
         neighborsMap[i] = dists.slice(0, k).map(o => o.j);
       });
       // Dibuja red estática
       const pos = [];
-      staticPoints.forEach((v,i) => {
-        neighborsMap[i].forEach(j => { if (j>i) { const w=staticPoints[j]; pos.push(v.x,v.y,v.z,w.x,w.y,w.z); }});
+      staticPoints.forEach((v, i) => {
+        neighborsMap[i].forEach(j => {
+          if (j > i) {
+            const w = staticPoints[j];
+            pos.push(v.x, v.y, v.z, w.x, w.y, w.z);
+          }
+        });
       });
-      const netGeo = new THREE.BufferGeometry(); netGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
-      const netMat = new THREE.LineBasicMaterial({ color:0xffffff, opacity:0.1, transparent:true });
+      const netGeo = new THREE.BufferGeometry();
+      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.1, transparent: true });
       scene.add(new THREE.LineSegments(netGeo, netMat));
+      // Dibuja nodos
+      const ptsGeo = new THREE.BufferGeometry();
+      const arr = new Float32Array(staticPoints.length * 3);
+      staticPoints.forEach((v, i) => { arr[3*i]=v.x; arr[3*i+1]=v.y; arr[3*i+2]=v.z; });
+      ptsGeo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+      const ptsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.02 });
+      scene.add(new THREE.Points(ptsGeo, ptsMat));
     }
 
     function onWindowResize() {
-      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.aspect = innerWidth/innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(innerWidth, innerHeight);
     }
 
     function onPointerMove(event) {
       if (!earthMesh) return;
-      // convertir a NDC
-      mouse.x = (event.clientX/window.innerWidth)*2 - 1;
-      mouse.y = -(event.clientY/window.innerHeight)*2 + 1;
+      mouse.x = (event.clientX / innerWidth) * 2 - 1;
+      mouse.y = - (event.clientY / innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
       const hit = raycaster.intersectObject(earthMesh)[0];
-      if (!hit) return;
-      const p = hit.point.clone().normalize();
-      // Conexiones dyn
-      neighborsMap; // no usamos dyn lines here
-      // Magnet: conecta nodos cercanos al cursor
-      const threshold = 0.15;
-      staticPoints.forEach((v,i) => {
-        if (v.distanceTo(p) < threshold) {
-          const lineGeo = new THREE.BufferGeometry().setFromPoints([v, p]);
-          const mat = new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:0.7, depthTest:false });
-          const ln = new THREE.Line(lineGeo, mat);
-          ln.birth = performance.now();
-          scene.add(ln);
-          magnetLines.push(ln);
-        }
-      });
+      if (hit) {
+        const p = hit.point.clone().normalize();
+        // Magnet: nodos cercanos
+        staticPoints.forEach((v, i) => {
+          if (v.distanceTo(p) < 0.15) {
+            // Conectar a sus vecinos
+            neighborsMap[i].forEach(j => {
+              dynamicLines.push(new AnimatedLine(v, staticPoints[j]));
+            });
+          }
+        });
+      }
+    }
+
+    class AnimatedLine {
+      constructor(start, end) {
+        this.start = start;
+        this.end = end;
+        this.t = 0;
+        this.geo = new THREE.BufferGeometry().setFromPoints([start, start]);
+        this.mat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthTest: false });
+        this.line = new THREE.Line(this.geo, this.mat);
+        this.line.userData.birth = performance.now();
+        this.line.renderOrder = 2;
+        scene.add(this.line);
+      }
+      update(delta) {
+        this.t = Math.min(this.t + delta * 0.5, 1);
+        const mid = this.start.clone().lerp(this.end, this.t);
+        this.geo.setFromPoints([this.start, mid]);
+      }
+      isExpired(now) {
+        return now - this.line.userData.birth > 2000;
+      }
     }
 
     function animate() {
       requestAnimationFrame(animate);
       const now = performance.now();
-      // rota esfera y red
-      scene.traverse(obj => { if (obj.type==='Mesh' || obj.type==='LineSegments') obj.rotation.y += 0.0005; });
-      // limpiar magnet lines >2s
-      for (let i=magnetLines.length-1; i>=0; i--) {
-        const ln = magnetLines[i];
-        const age = now - ln.birth;
-        if (age>2000) {
-          scene.remove(ln);
-          magnetLines.splice(i,1);
+      // Auto-lines aleatorios
+      if (now - lastAuto > autoInterval) {
+        lastAuto = now;
+        for (let i = 0; i < 2; i++) {
+          const idx = Math.floor(Math.random() * staticPoints.length);
+          const neigh = neighborsMap[idx][Math.floor(Math.random() * neighborsMap[idx].length)];
+          dynamicLines.push(new AnimatedLine(staticPoints[idx], staticPoints[neigh]));
         }
       }
+      // Actualizar líneas animadas
+      for (let i = dynamicLines.length - 1; i >= 0; i--) {
+        const al = dynamicLines[i];
+        al.update(0.016);
+        if (al.isExpired(now)) {
+          scene.remove(al.line);
+          dynamicLines.splice(i, 1);
+        }
+      }
+      // Rotar todos los meshes y lineSegments y Points
+      scene.traverse(o => {
+        if (o.isMesh || o.isLineSegments || o.isPoints) o.rotation.y += 0.0005;
+      });
       renderer.render(scene, camera);
     }
   </script>
