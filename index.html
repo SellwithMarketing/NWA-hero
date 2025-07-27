@@ -49,7 +49,7 @@
       renderer.setSize(paneWidth, paneHeight);
       renderer.setClearColor(0x196984);
 
-      // Construye red & puntos antes de textura
+      // Construir red & puntos
       buildStaticNetwork(300, 3);
 
       // Carga y agrega esfera con continentes
@@ -92,7 +92,7 @@
         staticPoints.push(v.clone());
         originalPoints.push(v.clone());
       }
-      // Función para añadir regiones específicas
+      // Añadir puntos en EE.UU., Canadá y México
       const addRegion = (count, latMin, latMax, lonMin, lonMax) => {
         for (let i = 0; i < count; i++) {
           const lat = (Math.random() * (latMax - latMin) + latMin) * Math.PI/180;
@@ -103,80 +103,78 @@
           staticPoints.push(v.clone()); originalPoints.push(v.clone());
         }
       };
-      addRegion(20, 24, 49, -125, -94);  // EE.UU.
-      addRegion(10, 45, 60, -140, -60);  // Canadá
-      addRegion(10, 15, 30, -117, -86);  // México
+      addRegion(20, 24, 49, -125, -94);
+      addRegion(10, 45, 60, -140, -60);
+      addRegion(10, 15, 30, -117, -86);
 
       // Vecinos k más cercanos
       staticPoints.forEach((v,i) => {
         const d = staticPoints.map((w,j)=>({j, d:v.distanceTo(w)})).filter(o=>o.j!==i).sort((a,b)=>a.d-b.d);
-        neighborsMap[i]=d.slice(0,k).map(o=>o.j);
+        neighborsMap[i] = d.slice(0,k).map(o=>o.j);
       });
 
-      // Construir líneas permanentes
-      const edges=[];
-      staticPoints.forEach((v,i)=>{
-        neighborsMap[i].forEach(j=>{
-          if (j>i) {
+      // Líneas permanentes con grosor 0.3
+      const edges = [];
+      staticPoints.forEach((v,i) => {
+        neighborsMap[i].forEach(j => {
+          if (j > i) {
             const w = staticPoints[j];
             edges.push(v.x,v.y,v.z, w.x,w.y,w.z);
           }
         });
       });
       netGeo = new THREE.BufferGeometry();
-      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges,3));
-      const netMat = new THREE.LineBasicMaterial({ color:0xffffff, opacity:1.0, transparent:true });
+      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges, 3));
+      const netMat = new THREE.LineBasicMaterial({
+        color: 0xffffff,
+        opacity: 1.0,
+        transparent: true,
+        linewidth: 0.3
+      });
       scene.add(new THREE.LineSegments(netGeo, netMat));
 
-      // Construir puntos
+      // Puntos
       const ptsArr = new Float32Array(staticPoints.length*3);
       staticPoints.forEach((v,i)=>{ ptsArr[3*i]=v.x; ptsArr[3*i+1]=v.y; ptsArr[3*i+2]=v.z; });
-      ptsGeo=new THREE.BufferGeometry();
+      ptsGeo = new THREE.BufferGeometry();
       ptsGeo.setAttribute('position', new THREE.BufferAttribute(ptsArr,3));
-      const ptsMat=new THREE.PointsMaterial({ color:0xffffff, size:0.013 });
+      const ptsMat = new THREE.PointsMaterial({ color:0xffffff, size:0.013 });
       scene.add(new THREE.Points(ptsGeo, ptsMat));
     }
 
     function onWindowResize() {
-      const paneWidth=window.innerWidth*0.55;
-      const paneHeight=window.innerHeight;
-      camera.aspect=paneWidth/paneHeight;
+      const paneWidth = window.innerWidth*0.55;
+      const paneHeight = window.innerHeight;
+      camera.aspect = paneWidth/paneHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(paneWidth,paneHeight);
     }
 
     function onPointerMove(e) {
       if (!earthMesh) return;
-      const r=renderer.domElement.getBoundingClientRect();
-      mouse.x=((e.clientX-r.left)/r.width)*2-1;
-      mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+      const r = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX-r.left)/r.width)*2-1;
+      mouse.y = -((e.clientY-r.top)/r.height)*2+1;
       raycaster.setFromCamera(mouse,camera);
-      const hit=raycaster.intersectObject(earthMesh)[0];
+      const hit = raycaster.intersectObject(earthMesh)[0];
       if (!hit) return;
-      const p=hit.point.clone().normalize();
-      const now=performance.now();
-      staticPoints.forEach((v,i)=>{ if(v.distanceTo(p)<pullRadius) influences.push({index:i,target:p.clone(),birth:now}); });
+      const p = hit.point.clone().normalize();
+      const now = performance.now();
+      staticPoints.forEach((v,i)=>{ if (v.distanceTo(p)<pullRadius) influences.push({index:i,target:p.clone(),birth:now}); });
     }
 
     function animate() {
       requestAnimationFrame(animate);
-      // Rotar todo
+      // Rotación
       scene.traverse(o=>{ if(o.isMesh||o.isLineSegments||o.isPoints) o.rotation.y+=0.0005; });
-      // Efecto imán
+      // Imán
       const now=performance.now();
-      for(let i=influences.length-1;i>=0;i--){
-        const inf=influences[i];
-        const t=(now-inf.birth)/pullDuration;
-        if(t>=1) { staticPoints[inf.index].copy(originalPoints[inf.index]); influences.splice(i,1); }
-        else { const s=Math.sin(t*Math.PI)*pullStrength; staticPoints[inf.index].lerpVectors(originalPoints[inf.index],inf.target,s); }
-      }
-      // Update buffers
-      const pArr=ptsGeo.attributes.position.array;
-      staticPoints.forEach((v,i)=>{ pArr[3*i]=v.x; pArr[3*i+1]=v.y; pArr[3*i+2]=v.z; });
-      ptsGeo.attributes.position.needsUpdate=true;
-      const nArr=netGeo.attributes.position.array; let ptr=0;
-      staticPoints.forEach((v,i)=>{ neighborsMap[i].forEach(j=>{ if(j>i){ const w=staticPoints[j]; nArr[ptr++]=v.x; nArr[ptr++]=v.y; nArr[ptr++]=v.z; nArr[ptr++]=w.x; nArr[ptr++]=w.y; nArr[ptr++]=w.z; } }); });
-      netGeo.attributes.position.needsUpdate=true;
+      for(let i=influences.length-1;i>=0;i--){ const inf=influences[i]; const t=(now-inf.birth)/pullDuration;
+        if(t>=1){ staticPoints[inf.index].copy(originalPoints[inf.index]); influences.splice(i,1);
+        } else { const s=Math.sin(t*Math.PI)*pullStrength; staticPoints[inf.index].lerpVectors(originalPoints[inf.index],inf.target,s); }}
+      // Actualizar buffers
+      const pArr=ptsGeo.attributes.position.array; staticPoints.forEach((v,i)=>{ pArr[3*i]=v.x; pArr[3*i+1]=v.y; pArr[3*i+2]=v.z; }); ptsGeo.attributes.position.needsUpdate=true;
+      const nArr=netGeo.attributes.position.array; let ptr=0; staticPoints.forEach((v,i)=>{ neighborsMap[i].forEach(j=>{ if(j>i){ const w=staticPoints[j]; nArr[ptr++]=v.x; nArr[ptr++]=v.y; nArr[ptr++]=v.z; nArr[ptr++]=w.x; nArr[ptr++]=w.y; nArr[ptr++]=w.z;} }); }); netGeo.attributes.position.needsUpdate=true;
       renderer.render(scene,camera);
     }
   </script>
