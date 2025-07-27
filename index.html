@@ -3,41 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hero 3D Conexiones Reactivas Automáticas</title>
+  <title>Hero 3D Conexiones Reactivas Automáticas</title>
   <style>
-    /* LAYOUT SIN NINGÚN CURSOR EN CSS */
+    /* --- LAYOUT SIN NINGÚN cursor EN CSS --- */
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
       overflow: hidden;
       background: #2488AA;
     }
     body {
       display: flex;
     }
-    .text-pane {
+    .text‑pane {
       flex: 0.45;
     }
-    .canvas-pane {
+    .canvas‑pane {
       flex: 0.55;
       position: relative;
     }
     canvas {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
       display: block;
-      /* NO cursor aquí */
+      /* nada de cursor aquí */
     }
   </style>
 </head>
 <body>
-  <div class="text-pane"></div>
-  <div class="canvas-pane">
+  <div class="text‑pane"></div>
+  <div class="canvas‑pane">
     <canvas id="heroCanvas"></canvas>
   </div>
 
@@ -51,7 +47,7 @@
     const mouse = new THREE.Vector2();
     const pullR = 0.25, pullT = 3000, pullS = 2.5;
 
-    // Ruta a tu Cursor.png
+    // Asegúrate de que '/Cursor.png' responda 200 en Network
     const cursorLogo = "url('/Cursor.png') 16 16, auto";
 
     init();
@@ -59,7 +55,6 @@
 
     function init() {
       scene = new THREE.Scene();
-
       const w = window.innerWidth * 0.55;
       const h = window.innerHeight;
       camera = new THREE.PerspectiveCamera(60, w/h, 0.1, 100);
@@ -96,7 +91,7 @@
       );
 
       window.addEventListener('resize', onResize);
-      // Atiende pointermove en window para garantizar que se dispare
+      // ⚠️ Atiende pointermove en window
       window.addEventListener('pointermove', onMove);
     }
 
@@ -125,8 +120,8 @@
       // regiones densas
       const addRegion = (c, lat1, lat2, lon1, lon2) => {
         for (let i = 0; i < c; i++) {
-          const lat = (Math.random()*(lat2-lat1)+lat1)*Math.PI/180;
-          const lon = (Math.random()*(lon2-lon1)+lon1)*Math.PI/180;
+          const lat = (Math.random()*(lat2-lat1) + lat1)*Math.PI/180;
+          const lon = (Math.random()*(lon2-lon1) + lon1)*Math.PI/180;
           const v = new THREE.Vector3(
             Math.cos(lat)*Math.cos(lon),
             Math.sin(lat),
@@ -141,41 +136,41 @@
       addRegion(10,15,30,-117,-86);
 
       // vecinos más cercanos
-      points.forEach((v, i) => {
+      points.forEach((v,i) => {
         const arr = points
-          .map((w, j) => ({ j, d: v.distanceTo(w) }))
-          .filter(o => o.j !== i)
-          .sort((a, b) => a.d - b.d);
-        neighbors[i] = arr.slice(0, k).map(o => o.j);
+          .map((w,j)=>({ j, d: v.distanceTo(w) }))
+          .filter(o=>o.j!==i)
+          .sort((a,b)=>a.d-b.d);
+        neighbors[i] = arr.slice(0,k).map(o=>o.j);
       });
 
-      // líneas
+      // crea líneas
       const edges = [];
       points.forEach((v,i) => {
         neighbors[i].forEach(j => {
-          if (j > i) {
+          if (j>i) {
             const w = points[j];
-            edges.push(v.x, v.y, v.z, w.x, w.y, w.z);
+            edges.push(v.x,v.y,v.z, w.x,w.y,w.z);
           }
         });
       });
       netGeo = new THREE.BufferGeometry();
-      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges, 3));
+      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(edges,3));
       const netMat = new THREE.LineBasicMaterial({
-        color: 0xffffff, opacity: 0.5, transparent: true, depthTest: false
+        color:0xffffff, opacity:0.5, transparent:true, depthTest:false
       });
       scene.add(new THREE.LineSegments(netGeo, netMat));
 
-      // puntos
-      const pa = new Float32Array(points.length * 3);
+      // crea puntos
+      const pa = new Float32Array(points.length*3);
       points.forEach((v,i) => {
         pa[3*i]   = v.x;
         pa[3*i+1] = v.y;
         pa[3*i+2] = v.z;
       });
       ptsGeo = new THREE.BufferGeometry();
-      ptsGeo.setAttribute('position', new THREE.BufferAttribute(pa, 3));
-      const pm = new THREE.PointsMaterial({ color: 0xffffff, size: 0.013 });
+      ptsGeo.setAttribute('position', new THREE.BufferAttribute(pa,3));
+      const pm = new THREE.PointsMaterial({ color:0xffffff, size:0.013 });
       scene.add(new THREE.Points(ptsGeo, pm));
     }
 
@@ -192,13 +187,14 @@
 
       console.log('⮕ onMove() hits =', hits.length);
 
-      // aplica cursor sólo al canvas
+      // 🚀 Aplicamos cursor al BODY (override con !important)
       if (hits.length) {
-        canvas.style.setProperty('cursor', cursorLogo, 'important');
+        document.body.style.setProperty('cursor', cursorLogo, 'important');
       } else {
-        canvas.style.setProperty('cursor', 'auto', 'important');
+        document.body.style.setProperty('cursor', 'auto', 'important');
       }
 
+      // efecto de “tirón”
       if (hits[0]) {
         const p = hits[0].point.clone().normalize();
         const now = performance.now();
@@ -212,13 +208,12 @@
 
     function animate() {
       requestAnimationFrame(animate);
-
       scene.children.forEach(o => {
         if (o.geometry) o.rotation.y += 0.0005;
       });
 
       const now = performance.now();
-      for (let i = influence.length - 1; i >= 0; i--) {
+      for (let i = influence.length-1; i >= 0; i--) {
         const inf = influence[i];
         const t = (now - inf.t)/pullT;
         if (t >= 1) {
@@ -242,7 +237,7 @@
       let ptr = 0;
       points.forEach((v,i) => {
         neighbors[i].forEach(j => {
-          if (j > i) {
+          if (j>i) {
             const w = points[j];
             nArr[ptr++] = v.x; nArr[ptr++] = v.y; nArr[ptr++] = v.z;
             nArr[ptr++] = w.x; nArr[ptr++] = w.y; nArr[ptr++] = w.z;
